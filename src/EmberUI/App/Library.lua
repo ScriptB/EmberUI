@@ -888,24 +888,24 @@ local function buildWindow(cfg)
 			secWrap.Name                  = sname .. "_Sec"
 			secWrap.Size                  = UDim2.new(1, 0, 0, 0)
 			secWrap.AutomaticSize         = Enum.AutomaticSize.Y
-			secWrap.BackgroundColor3      = T.Surface
+			secWrap.BackgroundColor3      = T.SurfaceHi
 			secWrap.BackgroundTransparency= 0
 			secWrap.ZIndex                = 4
 			secWrap.Parent                = page
 			corner(secWrap, 8)
-			stroke(secWrap, 1, T.Border)
+			stroke(secWrap, 1, T.Border, 0.55)
 			list(secWrap, Enum.FillDirection.Vertical, 0)
 
 			-- Header: SurfaceHi + UICorner(8) + fixCorners("bottom") = top-rounded only
 			local hdr = Instance.new("Frame")
 			hdr.Name             = "Header"
 			hdr.LayoutOrder      = 0
-			hdr.Size             = UDim2.new(1, 0, 0, 36)
-			hdr.BackgroundColor3 = T.SurfaceHi
+			hdr.Size             = UDim2.new(1, 0, 0, 34)
+			hdr.BackgroundColor3 = T.Surface
 			hdr.ZIndex           = 5
 			hdr.Parent           = secWrap
 			corner(hdr, 8)
-			fixCorners(hdr, "bottom", T.SurfaceHi, 9)
+			fixCorners(hdr, "bottom", T.Surface, 9)
 
 			-- Bottom separator line of header
 			mkFrame({
@@ -913,7 +913,7 @@ local function buildWindow(cfg)
 				Position         = UDim2.new(0, 0, 1, 0),
 				Size             = UDim2.new(1, 0, 0, 1),
 				BackgroundColor3 = T.Border,
-				BackgroundTransparency = 0.35,
+				BackgroundTransparency = 0.72,
 				ZIndex           = 6,
 			}, hdr)
 
@@ -968,7 +968,8 @@ local function buildWindow(cfg)
 				Visible       = expanded,
 				ZIndex        = 4,
 			}, secWrap)
-			list(contentFrame, Enum.FillDirection.Vertical, 0)
+			pad(contentFrame, 8, 8, 5, 5)
+			list(contentFrame, Enum.FillDirection.Vertical, 2)
 
 			hdrHit.Activated:Connect(function()
 				contentFrame.Visible = not contentFrame.Visible
@@ -982,14 +983,14 @@ local function buildWindow(cfg)
 				local row = Instance.new("Frame")
 				row.Name                  = rname
 				row.Size                  = UDim2.new(1, 0, 0, h)
-				row.BackgroundColor3      = T.Surface
-				row.BackgroundTransparency= 0.2
+				row.BackgroundColor3      = T.SurfaceHi
+				row.BackgroundTransparency= 1
 				row.ZIndex                = 5
 				row.Parent                = contentFrame
 				mkFrame({
 					Size             = UDim2.new(1, 0, 0, 1),
 					BackgroundColor3 = T.Border,
-					BackgroundTransparency = 0.45,
+					BackgroundTransparency = 0.84,
 					ZIndex           = 6,
 				}, row)
 				return row
@@ -1044,9 +1045,9 @@ local function buildWindow(cfg)
 				local changed = Signal.new()
 				local row = makeRow(c2.Name or "Progress", 42)
 				rowNameLabel(row, c2.Name or "Progress")
-				local track = mkFrame({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.new(0, 158, 0, 8), BackgroundColor3 = T.SurfaceHover, ZIndex = 6 }, row)
+				local track = mkFrame({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.new(0, 158, 0, 8), BackgroundColor3 = T.SurfaceHover, BackgroundTransparency = 0, ZIndex = 6 }, row)
 				corner(track, 4)
-				local fill = mkFrame({ Size = UDim2.new(value, 0, 1, 0), BackgroundColor3 = T.Accent, ZIndex = 7 }, track)
+				local fill = mkFrame({ Size = UDim2.new(value, 0, 1, 0), BackgroundColor3 = T.Accent, BackgroundTransparency = 0, ZIndex = 7 }, track)
 				corner(fill, 4)
 				local ctrl = { _row = row, _name = c2.Name or "Progress" }
 				function ctrl:Get() return value end
