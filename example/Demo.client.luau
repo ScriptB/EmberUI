@@ -22,6 +22,9 @@ local Farm = Win:Tab("Farm")
 
 local autoSection = Farm:Section("Auto Steal")
 
+autoSection:Label({ Text = "Core controls and lifecycle examples" })
+autoSection:Separator()
+
 local autoSteal = autoSection:Toggle({
 	Name     = "Auto Steal",
 	Default  = false,
@@ -70,6 +73,11 @@ local speedSlider = autoSection:Slider({
 		print("Speed:", v)
 	end,
 })
+
+local progress = autoSection:Progress({ Name = "Setup progress", Value = 0.35 })
+progress:Changed(function(value)
+	print("Progress:", value)
+end)
 
 -- ── Player Tab ──────────────────────────────────────────────────────────────
 local Player = Win:Tab("Player")
@@ -128,7 +136,7 @@ miscSec:Input({
 	Callback    = function(v) print("Input:", v) end,
 })
 
-miscSec:Label({ Text = "EmberUI v1.0.0 — High quality Roblox UI" })
+miscSec:Label({ Text = "EmberUI v2.0.1 — Lifecycle hotfix in progress" })
 
 -- ── State example ────────────────────────────────────────────────────────────
 local godState = EmberUI.State(false)

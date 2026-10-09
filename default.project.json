@@ -5,7 +5,7 @@
 
     "ReplicatedStorage": {
       "EmberUI": {
-        "$path": "src/EmberUI.lua"
+        "$path": "src/EmberUI"
       }
     },
 

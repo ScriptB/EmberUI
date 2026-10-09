@@ -1,6 +1,8 @@
 --!strict
+-- Library composition layer. Shared systems live in sibling Core, Layout,
+-- Managers, and Theme folders; UI construction remains here during migration.
 --[[
-	EmberUI  v2.0.0
+	EmberUI  v2.0.1
 	github.com/ScriptB/EmberUI
 
 	local UI = require(script.Parent.EmberUI)
@@ -32,40 +34,41 @@ local TweenService     = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 
+local Root = script.Parent.Parent
+local Core = Root.Core
+local Maid = require(Core.Maid)
+local State = require(Core.State)
+local Signal = require(Core.Signal)
+local Validation = require(Core.Validation)
+local Logger = require(Core.Logger)
+local WindowManager = require(Root.Managers.WindowManager)
+local OverlayManager = require(Root.Managers.OverlayManager)
+local ThemeManager = require(Root.Managers.ThemeManager)
+local PersistenceManager = require(Root.Managers.PersistenceManager)
+local Breakpoints = require(Root.Layout.Breakpoints)
+local windowManager = WindowManager.new()
+
+local function reportCallbackError(context, err)
+	Logger.callbackError(context, err)
+end
+
+local function callCallback(context, callback, ...)
+	if type(callback) ~= "function" then return end
+	local args = table.pack(...)
+	local ok, err = xpcall(function()
+		callback(table.unpack(args, 1, args.n))
+	end, debug.traceback)
+	if not ok then reportCallbackError(context, err) end
+end
+
 -- ── Theme ─────────────────────────────────────────────────────────────────────
-local T = {
-	Bg           = Color3.fromRGB(11, 11, 16),
-	Surface      = Color3.fromRGB(17, 17, 25),
-	SurfaceHi    = Color3.fromRGB(24, 24, 35),
-	SurfaceHover = Color3.fromRGB(32, 32, 46),
-
-	Accent       = Color3.fromRGB(218, 78, 36),
-	AccentBright = Color3.fromRGB(245, 112, 62),
-	AccentDark   = Color3.fromRGB(148, 42, 14),
-	AccentMid    = Color3.fromRGB(183, 60, 25),
-
-	Text         = Color3.fromRGB(238, 238, 244),
-	TextSub      = Color3.fromRGB(148, 148, 168),
-	TextHint     = Color3.fromRGB(72, 72, 92),
-
-	On           = Color3.fromRGB(56, 188, 78),
-	OnDark       = Color3.fromRGB(33, 128, 48),
-	OnBright     = Color3.fromRGB(80, 220, 100),
-	Off          = Color3.fromRGB(38, 38, 54),
-	OffDark      = Color3.fromRGB(24, 24, 36),
-
-	Border       = Color3.fromRGB(36, 36, 52),
-	BorderHi     = Color3.fromRGB(58, 58, 78),
-
-	Success      = Color3.fromRGB(56, 188, 78),
-	SuccessDark  = Color3.fromRGB(33, 128, 48),
-	Warn         = Color3.fromRGB(220, 158, 30),
-	WarnDark     = Color3.fromRGB(160, 112, 18),
-	Error        = Color3.fromRGB(220, 55, 55),
-	ErrorDark    = Color3.fromRGB(160, 30, 30),
-	Info         = Color3.fromRGB(60, 148, 220),
-	InfoDark     = Color3.fromRGB(35, 100, 160),
-}
+local T = require(Root.Theme.Tokens)
+local themeManager = ThemeManager.new(T, {
+	["Ember Dark"] = {},
+	["Ember Light"] = require(Root.Theme.EmberLight),
+	["Ember High Contrast"] = require(Root.Theme.EmberHighContrast),
+})
+local reducedMotion = false
 
 -- ── Tween presets ─────────────────────────────────────────────────────────────
 local TI_FAST   = TweenInfo.new(0.12, Enum.EasingStyle.Quad,   Enum.EasingDirection.Out)
@@ -74,6 +77,10 @@ local TI_SPRING = TweenInfo.new(0.28, Enum.EasingStyle.Back,   Enum.EasingDirect
 local TI_LINEAR = TweenInfo.new(1,    Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
 
 local function tw(obj, props, info)
+	if reducedMotion then
+		for property, value in pairs(props) do obj[property] = value end
+		return
+	end
 	TweenService:Create(obj, info or TI_FAST, props):Play()
 end
 
@@ -156,6 +163,7 @@ local function mkButton(props, parent)
 	b.TextColor3      = T.Text
 	b.TextSize        = 14
 	b.AutoButtonColor = false
+	b.Selectable      = true
 	b.Text            = ""
 	if props then for k, v in pairs(props) do (b::any)[k] = v end end
 	if parent then b.Parent = parent end
@@ -180,30 +188,10 @@ local function fixCorners(parent, side, col, h)
 	return f
 end
 
--- ── State ─────────────────────────────────────────────────────────────────────
-local function State(default)
-	local self = { _val = default, _subs = {} }
-	function self:Get() return self._val end
-	function self:Set(v)
-		if v == self._val then return end
-		self._val = v
-		for _, cb in ipairs(self._subs) do pcall(cb, v) end
-	end
-	function self:Sub(cb)
-		table.insert(self._subs, cb)
-		return function()
-			for i, s in ipairs(self._subs) do
-				if s == cb then table.remove(self._subs, i); return end
-			end
-		end
-	end
-	return self
-end
-
 -- ── Dragging ──────────────────────────────────────────────────────────────────
-local function makeDraggable(handle, target, onMove)
+local function makeDraggable(handle, target, maid, onMove)
 	local dragging, dragStart, startPos = false, nil, nil
-	handle.InputBegan:Connect(function(inp)
+	maid:Give(handle.InputBegan:Connect(function(inp)
 		if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 		dragging  = true
 		dragStart = inp.Position
@@ -211,8 +199,8 @@ local function makeDraggable(handle, target, onMove)
 		inp.Changed:Connect(function()
 			if inp.UserInputState == Enum.UserInputState.End then dragging = false end
 		end)
-	end)
-	UserInputService.InputChanged:Connect(function(inp)
+	end))
+	maid:Give(UserInputService.InputChanged:Connect(function(inp)
 		if not dragging or inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
 		local d = inp.Position - dragStart
 		target.Position = UDim2.new(
@@ -220,14 +208,54 @@ local function makeDraggable(handle, target, onMove)
 			startPos.Y.Scale, startPos.Y.Offset + d.Y
 		)
 		if onMove then onMove() end
-	end)
+	end))
+end
+
+local function makeResizable(target, maid, options, clampToViewport)
+	local minWidth = options.MinWidth or 360
+	local minHeight = options.MinHeight or 240
+	local maxWidth = options.MaxWidth or 1600
+	local maxHeight = options.MaxHeight or 1000
+	local activeEdge, startPointer, startSize, startPosition = nil, nil, nil, nil
+	local edges = {
+		Left = { position = UDim2.new(0, -4, 0, 8), size = UDim2.new(0, 8, 1, -16) },
+		Right = { position = UDim2.new(1, -4, 0, 8), size = UDim2.new(0, 8, 1, -16) },
+		Top = { position = UDim2.new(0, 8, 0, -4), size = UDim2.new(1, -16, 0, 8) },
+		Bottom = { position = UDim2.new(0, 8, 1, -4), size = UDim2.new(1, -16, 0, 8) },
+		TopLeft = { position = UDim2.new(0, -5, 0, -5), size = UDim2.fromOffset(12, 12) },
+		TopRight = { position = UDim2.new(1, -7, 0, -5), size = UDim2.fromOffset(12, 12) },
+		BottomLeft = { position = UDim2.new(0, -5, 1, -7), size = UDim2.fromOffset(12, 12) },
+		BottomRight = { position = UDim2.new(1, -7, 1, -7), size = UDim2.fromOffset(12, 12) },
+	}
+	for edge, layout in pairs(edges) do
+		local handle = mkButton({ Name = "Resize" .. edge, Position = layout.position, Size = layout.size, ZIndex = 20 }, target)
+		maid:Give(handle.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+			activeEdge, startPointer, startSize, startPosition = edge, input.Position, target.Size, target.Position
+			maid:Give(input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then activeEdge = nil end
+			end))
+		end))
+	end
+	maid:Give(UserInputService.InputChanged:Connect(function(input)
+		if not activeEdge or not startPointer or not startSize or not startPosition then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+		local delta = input.Position - startPointer
+		local left = activeEdge:find("Left", 1, true) ~= nil
+		local right = activeEdge:find("Right", 1, true) ~= nil
+		local top = activeEdge:find("Top", 1, true) ~= nil
+		local bottom = activeEdge:find("Bottom", 1, true) ~= nil
+		local width = math.clamp(startSize.X.Offset + (right and delta.X or (left and -delta.X or 0)), minWidth, maxWidth)
+		local height = math.clamp(startSize.Y.Offset + (bottom and delta.Y or (top and -delta.Y or 0)), minHeight, maxHeight)
+		local widthChange, heightChange = width - startSize.X.Offset, height - startSize.Y.Offset
+		target.Size = UDim2.new(startSize.X.Scale, width, startSize.Y.Scale, height)
+		target.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + (left and -widthChange / 2 or (right and widthChange / 2 or 0)), startPosition.Y.Scale, startPosition.Y.Offset + (top and -heightChange / 2 or (bottom and heightChange / 2 or 0)))
+		clampToViewport()
+	end))
 end
 
 -- ── Root ──────────────────────────────────────────────────────────────────────
 local function getRoot()
-	if rawget and rawget(_G, "gethui") and _G.gethui then return _G.gethui() end
-	local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-	if ok then return cg end
 	return LocalPlayer:WaitForChild("PlayerGui")
 end
 
@@ -258,7 +286,7 @@ local function repackNotifs()
 	end
 end
 
-local function spawnNotif(cfg)
+local function spawnNotif(cfg, ownerMaid)
 	cfg = cfg or {}
 	local title    = cfg.Title    or "Notice"
 	local message  = cfg.Message  or ""
@@ -280,6 +308,7 @@ local function spawnNotif(cfg)
 	n.BackgroundTransparency= 0
 	n.ZIndex                = 50
 	n.Parent                = g
+	if ownerMaid then ownerMaid:Give(n) end
 	corner(n, 8)
 	stroke(n, 1, T.Border)
 
@@ -362,9 +391,32 @@ end
 -- ══════════════════════════════════════════════════════════════════════════════
 local function buildWindow(cfg)
 	cfg         = cfg or {}
+	if type(cfg) ~= "table" then error("EmberUI:Window expects a configuration table", 2) end
+	Validation.warnUnknown(cfg, { "Id", "Title", "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight", "Scale", "Singleton" }, "Window")
 	cfg.Title   = cfg.Title  or "EmberUI"
 	cfg.Width   = cfg.Width  or 660
 	cfg.Height  = cfg.Height or 520
+	if type(cfg.Title) ~= "string" then error("EmberUI:Window Title must be a string", 2) end
+	if type(cfg.Width) ~= "number" or cfg.Width <= 0 then error("EmberUI:Window Width must be a positive number", 2) end
+	if type(cfg.Height) ~= "number" or cfg.Height <= 0 then error("EmberUI:Window Height must be a positive number", 2) end
+	if cfg.Scale ~= nil and (type(cfg.Scale) ~= "number" or cfg.Scale < 0.75 or cfg.Scale > 1.5) then error("EmberUI:Window Scale must be between 0.75 and 1.5", 2) end
+	for _, property in ipairs({ "MinWidth", "MinHeight", "MaxWidth", "MaxHeight" }) do
+		if cfg[property] ~= nil and (type(cfg[property]) ~= "number" or cfg[property] <= 0) then error("EmberUI:Window " .. property .. " must be a positive number", 2) end
+	end
+	if cfg.MinWidth and cfg.MaxWidth and cfg.MinWidth > cfg.MaxWidth then error("EmberUI:Window MinWidth must not exceed MaxWidth", 2) end
+	if cfg.MinHeight and cfg.MaxHeight and cfg.MinHeight > cfg.MaxHeight then error("EmberUI:Window MinHeight must not exceed MaxHeight", 2) end
+	local windowMaid = Maid.new()
+	local overlayManager = OverlayManager.new(windowMaid)
+	local Window: any = nil
+	local gui: ScreenGui? = nil
+	local destroyed = false
+	local function destroyWindow()
+		if destroyed then return end
+		destroyed = true
+		windowMaid:Destroy()
+		if gui then themeManager:Unregister(gui) end
+		if Window then windowManager:Unregister(Window) end
+	end
 
 	local TOPBAR_H  = 44
 	local SEARCH_H  = 38
@@ -372,12 +424,14 @@ local function buildWindow(cfg)
 	local SIDEBAR_GAP = 6
 
 	-- ScreenGui
-	local gui = Instance.new("ScreenGui")
+	gui = Instance.new("ScreenGui")
 	gui.Name           = "EmberUI_" .. cfg.Title:gsub("%s", "")
 	gui.ResetOnSpawn   = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.IgnoreGuiInset = true
 	gui.Parent         = getRoot()
+	windowMaid:Give(gui)
+	themeManager:Register(gui)
 
 	-- Main frame
 	local win = Instance.new("Frame")
@@ -391,6 +445,22 @@ local function buildWindow(cfg)
 	win.Parent                = gui
 	corner(win, 10)
 	stroke(win, 1, T.Border)
+	local uiScale = Instance.new("UIScale")
+	uiScale.Scale = cfg.Scale or 1
+	uiScale.Parent = win
+	local function clampToViewport()
+		local camera = workspace.CurrentCamera
+		if not camera then return end
+		local viewport = camera.ViewportSize
+		local halfWidth = math.max(0, (viewport.X - win.AbsoluteSize.X) / 2)
+		local halfHeight = math.max(0, (viewport.Y - win.AbsoluteSize.Y) / 2)
+		win.Position = UDim2.new(win.Position.X.Scale, math.clamp(win.Position.X.Offset, -halfWidth, halfWidth), win.Position.Y.Scale, math.clamp(win.Position.Y.Offset, -halfHeight, halfHeight))
+	end
+	makeResizable(win, windowMaid, cfg, clampToViewport)
+	task.defer(clampToViewport)
+	if workspace.CurrentCamera then
+		windowMaid:Give(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(clampToViewport))
+	end
 
 	-- ── TopBar ────────────────────────────────────────────────────────────────
 	-- Solid SurfaceHi with UICorner(10) + fixCorners("bottom") = top-rounded only
@@ -468,14 +538,16 @@ local function buildWindow(cfg)
 	stroke(closeBtn, 1, Color3.fromRGB(120, 22, 22))
 	closeBtn.MouseEnter:Connect(function() tw(closeBtn, { BackgroundColor3 = Color3.fromRGB(228, 60, 60) }) end)
 	closeBtn.MouseLeave:Connect(function() tw(closeBtn, { BackgroundColor3 = Color3.fromRGB(190, 45, 45) }) end)
-	closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+	closeBtn.Activated:Connect(destroyWindow)
 
-	makeDraggable(topBar, win)
+	makeDraggable(topBar, win, windowMaid, clampToViewport)
 
 	-- Minimize logic
 	local minimized = false
+	local restoredSize = win.Size
 	local function doMinimize()
 		minimized = not minimized
+		if minimized then restoredSize = win.Size end
 		for _, ch in ipairs(win:GetChildren()) do
 			if ch ~= topBar and ch:IsA("GuiObject") then
 				ch.Visible = not minimized
@@ -483,12 +555,12 @@ local function buildWindow(cfg)
 		end
 		tw(win, {
 			Size = minimized
-				and UDim2.new(0, cfg.Width, 0, TOPBAR_H + 2)
-				or  UDim2.new(0, cfg.Width, 0, cfg.Height)
+				and UDim2.new(restoredSize.X.Scale, restoredSize.X.Offset, 0, TOPBAR_H + 2)
+				or restoredSize
 		}, TI_MED)
-		minimizeBtn.Text = minimized and "□" or "—"
+		minimizeBtn.Text = minimized and "+" or "-"
 	end
-	minimizeBtn.MouseButton1Click:Connect(doMinimize)
+	minimizeBtn.Activated:Connect(doMinimize)
 
 	-- ── Left sidebar (ScrollingFrame for overflow) ────────────────────────────
 	local leftSide = Instance.new("ScrollingFrame")
@@ -560,27 +632,43 @@ local function buildWindow(cfg)
 		ZIndex           = 7,
 	}, searchBar)
 
-	mkLabel({
-		Position       = UDim2.new(0, 13, 0, 0),
-		Size           = UDim2.new(0, 18, 1, 0),
-		Text           = "⌕",
-		TextSize       = 17,
-		TextColor3     = T.TextHint,
-		Font           = Enum.Font.Gotham,
-		ZIndex         = 7,
-	}, searchBar)
+	-- Search icon: two plain Frames forming a magnifier circle + handle
+	local searchDot = Instance.new("Frame")
+	searchDot.Size             = UDim2.new(0, 11, 0, 11)
+	searchDot.Position         = UDim2.new(0, 13, 0.5, 0)
+	searchDot.AnchorPoint      = Vector2.new(0, 0.5)
+	searchDot.BackgroundTransparency = 1
+	searchDot.ZIndex           = 7
+	searchDot.Parent           = searchBar
+	local sdCircle = Instance.new("Frame")
+	sdCircle.Size             = UDim2.new(0, 8, 0, 8)
+	sdCircle.BackgroundTransparency = 1
+	sdCircle.BorderSizePixel  = 0
+	sdCircle.ZIndex           = 7
+	sdCircle.Parent           = searchDot
+	corner(sdCircle, 4)
+	stroke(sdCircle, 1.5, T.TextHint)
+	local sdHandle = Instance.new("Frame")
+	sdHandle.Size             = UDim2.new(0, 1.5, 0, 5)
+	sdHandle.Position         = UDim2.new(0, 8, 0, 7)
+	sdHandle.Rotation         = 45
+	sdHandle.BackgroundColor3 = T.TextHint
+	sdHandle.BorderSizePixel  = 0
+	sdHandle.ZIndex           = 7
+	sdHandle.Parent           = searchDot
 
 	mkFrame({
 		Size             = UDim2.new(0, 1, 0.55, 0),
-		Position         = UDim2.new(0, 34, 0.225, 0),
+		Position         = UDim2.new(0, 30, 0.225, 0),
 		BackgroundColor3 = T.Border,
 		BackgroundTransparency = 0,
 		ZIndex           = 7,
 	}, searchBar)
 
 	local searchBox = Instance.new("TextBox")
-	searchBox.Size              = UDim2.new(1, -46, 1, -12)
-	searchBox.Position          = UDim2.new(0, 40, 0, 6)
+	searchBox.Text              = ""
+	searchBox.Size              = UDim2.new(1, -42, 1, -12)
+	searchBox.Position          = UDim2.new(0, 36, 0, 6)
 	searchBox.BackgroundTransparency = 1
 	searchBox.PlaceholderText   = "Search features..."
 	searchBox.PlaceholderColor3 = T.TextHint
@@ -595,17 +683,92 @@ local function buildWindow(cfg)
 	-- ════════════════════════════════════════════════════════════════════════
 	--  Window object
 	-- ════════════════════════════════════════════════════════════════════════
-	local Window = {}
+	Window = {}
 	Window._tabs        = {}
 	Window._activeTab   = nil
 	Window._allElements = {}
 	Window._gui         = gui
 	Window._win         = win
+	Window._maid        = windowMaid
+	Window._ids         = {}
+	Window.Id           = nil
 
-	function Window:Notify(c) spawnNotif(c) end
-	function Window:Destroy() gui:Destroy() end
+	function Window:_validateControlId(config, kind)
+		local id = config.Id
+		if id == nil then return end
+		if type(id) ~= "string" or id == "" then
+			error(("EmberUI %s Id must be a non-empty string"):format(kind), 3)
+		end
+		if self._ids[id] then
+			error(("EmberUI duplicate control Id '%s'"):format(id), 3)
+		end
+	end
+
+	function Window:_registerControl(ctrl, config, kind)
+		local id = config.Id
+		if id ~= nil then
+			if type(id) ~= "string" or id == "" then
+				error(("EmberUI %s Id must be a non-empty string"):format(kind), 3)
+			end
+			if self._ids[id] then
+				error(("EmberUI duplicate control Id '%s'"):format(id), 3)
+			end
+			self._ids[id] = ctrl
+			ctrl.Id = id
+		end
+		table.insert(self._allElements, ctrl)
+		return ctrl
+	end
+	function Window:_unregisterControl(ctrl)
+		if ctrl.Id and self._ids[ctrl.Id] == ctrl then self._ids[ctrl.Id] = nil end
+		for index, current in ipairs(self._allElements) do
+			if current == ctrl then table.remove(self._allElements, index); break end
+		end
+	end
+
+	function Window:Notify(c) spawnNotif(c, self._maid) end
+	function Window:Destroy()
+		destroyWindow()
+	end
+	function Window:Close() self:Destroy() end
+	function Window:IsDestroyed() return destroyed end
 	function Window:Minimize() doMinimize() end
-	function Window:Toggle() win.Visible = not win.Visible end
+	function Window:Restore() if minimized then doMinimize() end end
+	function Window:Toggle()
+		win.Visible = not win.Visible
+		if win.Visible then self:BringToFront() end
+	end
+	function Window:BringToFront() windowManager:BringToFront(self) end
+	function Window:SetVisible(visible: boolean)
+		win.Visible = visible
+		if visible then self:BringToFront() end
+	end
+	function Window:SetPosition(position: UDim2) win.Position = position end
+	function Window:SetSize(size: UDim2) win.Size = size end
+	function Window:GetPosition() return win.Position end
+	function Window:GetSize() return win.Size end
+	function Window:SetScale(scale)
+		if type(scale) ~= "number" or scale < 0.75 or scale > 1.5 then error("EmberUI Window:SetScale expects 0.75–1.5", 2) end
+		uiScale.Scale = scale
+		clampToViewport()
+	end
+	function Window:GetScale() return uiScale.Scale end
+	function Window:GetBreakpoint() return Breakpoints.Get(win.AbsoluteSize.X) end
+	local breakpointChanged = Signal.new()
+	local currentBreakpoint = Window:GetBreakpoint()
+	windowMaid:Give(win:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		local nextBreakpoint = Window:GetBreakpoint()
+		if nextBreakpoint ~= currentBreakpoint then
+			currentBreakpoint = nextBreakpoint
+			breakpointChanged:Fire(nextBreakpoint)
+		end
+	end))
+	function Window:BreakpointChanged(callback) return breakpointChanged:Connect(callback) end
+	windowMaid:Give(function() breakpointChanged:Destroy() end)
+
+	windowMaid:Give(win.InputBegan:Connect(function()
+		Window:BringToFront()
+	end))
 
 	-- ── SideButton ───────────────────────────────────────────────────────────
 	function Window:SideButton(name2, callback)
@@ -622,7 +785,7 @@ local function buildWindow(cfg)
 		mkLabel({ Size = UDim2.new(1, 0, 1, 0), Text = name2, TextSize = 13, ZIndex = 5 }, btn)
 		btn.MouseEnter:Connect(function() tw(btn, { BackgroundColor3 = T.AccentBright }) end)
 		btn.MouseLeave:Connect(function() tw(btn, { BackgroundColor3 = T.Accent }) end)
-		btn.MouseButton1Click:Connect(function() pcall(callback) end)
+		btn.Activated:Connect(function() callCallback("SideButton", callback) end)
 		return btn
 	end
 
@@ -705,7 +868,7 @@ local function buildWindow(cfg)
 			Window._activeTab = Tab
 		end
 
-		tabBtn.MouseButton1Click:Connect(activate)
+		tabBtn.Activated:Connect(activate)
 		tabBtn.MouseEnter:Connect(function()
 			if Window._activeTab ~= Tab then tw(tabBtn, { BackgroundColor3 = T.SurfaceHover }) end
 		end)
@@ -754,18 +917,40 @@ local function buildWindow(cfg)
 				ZIndex           = 6,
 			}, hdr)
 
-			local chevron = mkLabel({
-				Size           = UDim2.new(0, 18, 1, 0),
-				Position       = UDim2.new(0, 10, 0, 0),
-				Text           = expanded and "▾" or "▸",
-				TextSize       = 11,
-				TextColor3     = T.Accent,
-				ZIndex         = 6,
-			}, hdr)
+			-- Frame-based chevron: two thin bars forming ">" rotated 90° when open
+			-- Using frames avoids Roblox font Unicode coverage gaps
+			local chevWrap = Instance.new("Frame")
+			chevWrap.Name             = "_chevron"
+			chevWrap.Size             = UDim2.new(0, 10, 0, 10)
+			chevWrap.Position         = UDim2.new(0, 12, 0.5, 0)
+			chevWrap.AnchorPoint      = Vector2.new(0, 0.5)
+			chevWrap.BackgroundTransparency = 1
+			chevWrap.Rotation         = expanded and 90 or 0
+			chevWrap.ZIndex           = 6
+			chevWrap.Parent           = hdr
+			local chevA = Instance.new("Frame")
+			chevA.Size             = UDim2.new(0, 6, 0, 1.5)
+			chevA.Position         = UDim2.new(0, 0, 0.5, -3)
+			chevA.Rotation         = 40
+			chevA.BackgroundColor3 = T.Accent
+			chevA.BorderSizePixel  = 0
+			chevA.ZIndex           = 6
+			chevA.Parent           = chevWrap
+			corner(chevA, 1)
+			local chevB = Instance.new("Frame")
+			chevB.Size             = UDim2.new(0, 6, 0, 1.5)
+			chevB.Position         = UDim2.new(0, 0, 0.5, 2)
+			chevB.Rotation         = -40
+			chevB.BackgroundColor3 = T.Accent
+			chevB.BorderSizePixel  = 0
+			chevB.ZIndex           = 6
+			chevB.Parent           = chevWrap
+			corner(chevB, 1)
+			local chevron = chevWrap  -- used below for the toggle
 
 			mkLabel({
-				Position       = UDim2.new(0, 30, 0, 0),
-				Size           = UDim2.new(1, -36, 1, 0),
+				Position       = UDim2.new(0, 28, 0, 0),
+				Size           = UDim2.new(1, -34, 1, 0),
 				Text           = sname,
 				TextSize       = 13,
 				Font           = Enum.Font.GothamBold,
@@ -785,9 +970,9 @@ local function buildWindow(cfg)
 			}, secWrap)
 			list(contentFrame, Enum.FillDirection.Vertical, 0)
 
-			hdrHit.MouseButton1Click:Connect(function()
+			hdrHit.Activated:Connect(function()
 				contentFrame.Visible = not contentFrame.Visible
-				chevron.Text = contentFrame.Visible and "▾" or "▸"
+				tw(chevron, { Rotation = contentFrame.Visible and 90 or 0 }, TI_FAST)
 			end)
 
 			-- ── Section object ────────────────────────────────────────────────
@@ -822,9 +1007,68 @@ local function buildWindow(cfg)
 				}, row)
 			end
 
+			function Section:Separator(c2)
+				c2 = c2 or {}
+				Window:_validateControlId(c2, "Separator")
+				Validation.warnUnknown(c2, { "Id", "Visible" }, "Separator")
+				local row = makeRow("Separator", 13)
+				row.BackgroundTransparency = 1
+				mkFrame({ Position = UDim2.new(0, 14, 0.5, 0), Size = UDim2.new(1, -28, 0, 1), BackgroundColor3 = T.Border, BackgroundTransparency = 0.25, ZIndex = 6 }, row)
+				local ctrl = { _row = row, _name = "Separator" }
+				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
+				function ctrl:SetVisible(visible) row.Visible = visible end
+				Window:_registerControl(ctrl, c2, "Separator")
+				return ctrl
+			end
+
+			function Section:Spacer(c2)
+				c2 = c2 or {}
+				Window:_validateControlId(c2, "Spacer")
+				Validation.warnUnknown(c2, { "Id", "Height", "Visible" }, "Spacer")
+				local height = c2.Height or 8
+				if type(height) ~= "number" or height < 0 then error("EmberUI Spacer Height must be a non-negative number", 2) end
+				local row = makeRow("Spacer", height)
+				row.BackgroundTransparency = 1
+				local ctrl = { _row = row, _name = "Spacer" }
+				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
+				function ctrl:SetVisible(visible) row.Visible = visible end
+				Window:_registerControl(ctrl, c2, "Spacer")
+				return ctrl
+			end
+
+			function Section:Progress(c2)
+				c2 = c2 or {}
+				Window:_validateControlId(c2, "Progress")
+				Validation.warnUnknown(c2, { "Id", "Name", "Value", "Visible" }, "Progress")
+				local value = math.clamp(tonumber(c2.Value) or 0, 0, 1)
+				local changed = Signal.new()
+				local row = makeRow(c2.Name or "Progress", 42)
+				rowNameLabel(row, c2.Name or "Progress")
+				local track = mkFrame({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.new(0, 158, 0, 8), BackgroundColor3 = T.SurfaceHover, ZIndex = 6 }, row)
+				corner(track, 4)
+				local fill = mkFrame({ Size = UDim2.new(value, 0, 1, 0), BackgroundColor3 = T.Accent, ZIndex = 7 }, track)
+				corner(fill, 4)
+				local ctrl = { _row = row, _name = c2.Name or "Progress" }
+				function ctrl:Get() return value end
+				function ctrl:Changed(callback) return changed:Connect(callback) end
+				function ctrl:Set(nextValue, fire)
+					if type(nextValue) ~= "number" then error("EmberUI Progress:Set expects a number", 2) end
+					value = math.clamp(nextValue, 0, 1)
+					tw(fill, { Size = UDim2.new(value, 0, 1, 0) }, TI_FAST)
+					if fire ~= false then changed:Fire(value) end
+				end
+				function ctrl:SetVisible(visible) row.Visible = visible end
+				function ctrl:Destroy() changed:Destroy(); Window:_unregisterControl(self); row:Destroy() end
+				Window:_registerControl(ctrl, c2, "Progress")
+				table.insert(Section._elements, ctrl)
+				return ctrl
+			end
+
 			-- ── TOGGLE ───────────────────────────────────────────────────────
 			function Section:Toggle(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Toggle")
+				Validation.warnUnknown(c2, { "Id", "Name", "Note", "Default", "Disabled", "Callback" }, "Toggle")
 				local tName  = c2.Name     or "Toggle"
 				local tDef   = c2.Default  or false
 				local tCb    = c2.Callback
@@ -876,6 +1120,10 @@ local function buildWindow(cfg)
 
 				local value = tDef
 				local _boundState = nil
+				local _unsubscribe = nil
+				local destroyed = false
+				local disabled = c2.Disabled == true
+				local changed = Signal.new()
 
 				local function applyToggle(v, fire)
 					value = v
@@ -886,12 +1134,19 @@ local function buildWindow(cfg)
 					tw(pill, { BackgroundColor3 = v and T.On or T.Off }, TI_FAST)
 					tw(knob, { BackgroundColor3 = v and T.OnBright or Color3.fromRGB(195, 195, 208) }, TI_FAST)
 					stroke(pill, 1, v and T.OnDark or T.OffDark)
-					if fire ~= false and tCb then pcall(tCb, v) end
+					if fire ~= false then
+						callCallback("Toggle", tCb, v)
+						changed:Fire(v)
+					end
 					if _boundState then _boundState:Set(v) end
 				end
 
 				applyToggle(tDef, false)
-				hit.MouseButton1Click:Connect(function() applyToggle(not value) end)
+				hit.Active = not disabled
+				if disabled then pill.BackgroundTransparency = 0.45 end
+				hit.Activated:Connect(function()
+					if not disabled then applyToggle(not value) end
+				end)
 
 				-- Runtime-settable note
 				local dynNote = mkLabel({
@@ -907,8 +1162,17 @@ local function buildWindow(cfg)
 				}, row)
 
 				local ctrl = { _row = row, _name = tName }
-				function ctrl:Set(v, fire) applyToggle(v, fire) end
+				function ctrl:Set(v, fire)
+					if destroyed then return end
+					applyToggle(v, fire)
+				end
 				function ctrl:Get() return value end
+				function ctrl:Changed(callback) return changed:Connect(callback) end
+				function ctrl:SetDisabled(nextDisabled)
+					disabled = nextDisabled == true
+					hit.Active = not disabled
+					pill.BackgroundTransparency = disabled and 0.45 or 0
+				end
 				function ctrl:SetNote(txt)
 					dynNote.Text    = txt
 					dynNote.Visible = txt ~= ""
@@ -916,14 +1180,32 @@ local function buildWindow(cfg)
 				end
 				function ctrl:GetNote() return dynNote.Text end
 				function ctrl:Bind(state)
+					self:Unbind()
 					_boundState = state
-					state:Sub(function(v) applyToggle(v, false) end)
+					local subscribe = state.Subscribe or state.Sub
+					if type(subscribe) ~= "function" or type(state.Get) ~= "function" then
+						error("EmberUI Toggle:Bind expects a State with Get and Subscribe/Sub", 2)
+					end
+					_unsubscribe = subscribe(state, function(v)
+						if not destroyed then applyToggle(v, false) end
+					end)
 					applyToggle(state:Get(), false)
 				end
-				function ctrl:Destroy() row:Destroy() end
+				function ctrl:Unbind()
+					if _unsubscribe then _unsubscribe(); _unsubscribe = nil end
+					_boundState = nil
+				end
+				function ctrl:Destroy()
+					if destroyed then return end
+					destroyed = true
+					self:Unbind()
+					changed:Destroy()
+					Window:_unregisterControl(self)
+					row:Destroy()
+				end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Toggle")
 				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
@@ -931,11 +1213,22 @@ local function buildWindow(cfg)
 			-- ── SLIDER ───────────────────────────────────────────────────────
 			function Section:Slider(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Slider")
+				Validation.warnUnknown(c2, { "Id", "Name", "Min", "Max", "Decimals", "Suffix", "Default", "Disabled", "Callback" }, "Slider")
 				local sName   = c2.Name     or "Slider"
 				local sMin    = c2.Min      or 0
 				local sMax    = c2.Max      or 100
 				local sDec    = c2.Decimals or 0
 				local sSuffix = c2.Suffix   or ""
+				if type(sMin) ~= "number" or type(sMax) ~= "number" or sMin >= sMax then
+					error("EmberUI Slider requires numeric Min and Max where Min is less than Max", 2)
+				end
+				if type(sDec) ~= "number" or sDec < 0 or sDec % 1 ~= 0 or sDec > 6 then
+					error("EmberUI Slider Decimals must be an integer from 0 to 6", 2)
+				end
+				if c2.Default ~= nil and type(c2.Default) ~= "number" then
+					error("EmberUI Slider Default must be a number", 2)
+				end
 				local sDef    = math.clamp(c2.Default or sMin, sMin, sMax)
 				local sCb     = c2.Callback
 
@@ -981,6 +1274,9 @@ local function buildWindow(cfg)
 
 				local value = sDef
 				local dragging = false
+				local disabled = c2.Disabled == true
+				local changed = Signal.new()
+				if disabled then trackBg.BackgroundTransparency = 0.45 end
 
 				local function updateVis(v)
 					local pct = (v - sMin) / math.max(sMax - sMin, 1e-9)
@@ -999,6 +1295,7 @@ local function buildWindow(cfg)
 					Position = UDim2.new(0, 0, 0.5, -10),
 					ZIndex   = 10,
 				}, trackBg)
+				hitArea.Active = not disabled
 
 				local function setFromX(mx)
 					local ap  = trackBg.AbsolutePosition
@@ -1008,44 +1305,71 @@ local function buildWindow(cfg)
 					local step = 1 / (10 ^ sDec)
 					value = math.clamp(math.floor(raw / step + 0.5) * step, sMin, sMax)
 					updateVis(value)
-					if sCb then pcall(sCb, value) end
+					callCallback("Slider", sCb, value)
+					changed:Fire(value)
 				end
 
 				hitArea.InputBegan:Connect(function(inp)
-					if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+					if not disabled and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
 						dragging = true
 						tw(handle, { Size = UDim2.new(0, 16, 0, 16) }, TI_FAST)
 						setFromX(inp.Position.X)
+					elseif not disabled and inp.UserInputType == Enum.UserInputType.Keyboard and (inp.KeyCode == Enum.KeyCode.Left or inp.KeyCode == Enum.KeyCode.Right) then
+						local step = 1 / (10 ^ sDec)
+						value = math.clamp(value + (inp.KeyCode == Enum.KeyCode.Right and step or -step), sMin, sMax)
+						updateVis(value)
+						callCallback("Slider", sCb, value)
+						changed:Fire(value)
 					end
 				end)
-				UserInputService.InputChanged:Connect(function(inp)
-					if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+				windowMaid:Give(UserInputService.InputChanged:Connect(function(inp)
+					if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 						setFromX(inp.Position.X)
 					end
-				end)
-				UserInputService.InputEnded:Connect(function(inp)
-					if inp.UserInputType == Enum.UserInputType.MouseButton1 and dragging then
+				end))
+				windowMaid:Give(UserInputService.InputEnded:Connect(function(inp)
+					if (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) and dragging then
 						dragging = false
 						tw(handle, { Size = UDim2.new(0, 13, 0, 13) }, TI_FAST)
 					end
-				end)
+				end))
 
 				local ctrl = { _row = row, _name = sName }
 				function ctrl:Set(v, fire)
+					if type(v) ~= "number" then error("EmberUI Slider:Set expects a number", 2) end
 					value = math.clamp(v, sMin, sMax)
 					updateVis(value)
-					if fire ~= false and sCb then pcall(sCb, value) end
+					if fire ~= false then
+						callCallback("Slider", sCb, value)
+						changed:Fire(value)
+					end
 				end
 				function ctrl:Get() return value end
+				function ctrl:Changed(callback) return changed:Connect(callback) end
+				function ctrl:SetDisabled(nextDisabled)
+					disabled = nextDisabled == true
+					hitArea.Active = not disabled
+					trackBg.BackgroundTransparency = disabled and 0.45 or 0
+				end
 				function ctrl:SetRange(mn, mx)
+					if type(mn) ~= "number" or type(mx) ~= "number" or mn >= mx then
+						error("EmberUI Slider:SetRange requires Min < Max", 2)
+					end
 					sMin = mn; sMax = mx
 					value = math.clamp(value, sMin, sMax)
 					updateVis(value)
 				end
-				function ctrl:Destroy() row:Destroy() end
+				local destroyed = false
+				function ctrl:Destroy()
+					if destroyed then return end
+					destroyed = true
+					changed:Destroy()
+					Window:_unregisterControl(self)
+					row:Destroy()
+				end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Slider")
 				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
@@ -1053,11 +1377,16 @@ local function buildWindow(cfg)
 			-- ── DROPDOWN ─────────────────────────────────────────────────────
 			function Section:Dropdown(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Dropdown")
+				Validation.warnUnknown(c2, { "Id", "Name", "Options", "Multi", "Default", "Disabled", "Callback" }, "Dropdown")
 				local dName    = c2.Name    or "Dropdown"
 				local dOpts    = c2.Options or {}
 				local dMulti   = c2.Multi   or false
 				local dDefault = c2.Default
 				local dCb      = c2.Callback
+				if type(dOpts) ~= "table" then error("EmberUI Dropdown Options must be an array", 2) end
+				local disabled = c2.Disabled == true
+				local changed = Signal.new()
 
 				local row = makeRow(dName, 42)
 				rowNameLabel(row, dName)
@@ -1102,6 +1431,15 @@ local function buildWindow(cfg)
 						selected[tostring(dDefault)] = true
 					end
 				end
+				local function getValue()
+					if dMulti then
+						local values = {}
+						for _, option in ipairs(dOpts) do if selected[option] then values[#values + 1] = option end end
+						return values
+					end
+					for _, option in ipairs(dOpts) do if selected[option] then return option end end
+					return nil
+				end
 
 				local function refreshLabel()
 					local parts = {}
@@ -1122,7 +1460,11 @@ local function buildWindow(cfg)
 				local menuFrame = nil
 
 				local function closeMenu()
-					if menuFrame then menuFrame:Destroy(); menuFrame = nil end
+					if menuFrame then
+						overlayManager:Clear(menuFrame)
+						menuFrame:Destroy()
+						menuFrame = nil
+					end
 					menuOpen = false
 					tw(caret, { Rotation = 0 })
 				end
@@ -1132,7 +1474,7 @@ local function buildWindow(cfg)
 					menuOpen = true
 					tw(caret, { Rotation = 180 })
 
-					local mH = math.min(#dOpts * 30, 180)
+					local mH = math.min(#dOpts * 30 + 34, 214)
 					local mf = Instance.new("ScrollingFrame")
 					mf.Name                  = "DDMenu"
 					mf.Size                  = UDim2.new(0, DW, 0, mH)
@@ -1152,14 +1494,34 @@ local function buildWindow(cfg)
 					stroke(mf, 1, T.Border)
 					list(mf, Enum.FillDirection.Vertical, 0)
 					menuFrame = mf
+					overlayManager:Open(mf, closeMenu)
+					local searchWrap = mkFrame({ Size = UDim2.new(1, 0, 0, 34), LayoutOrder = 0, BackgroundColor3 = T.Surface }, mf)
+					local searchBox = Instance.new("TextBox")
+					searchBox.Size = UDim2.new(1, -16, 1, -8)
+					searchBox.Position = UDim2.new(0, 8, 0, 4)
+					searchBox.BackgroundColor3 = T.SurfaceHover
+					searchBox.TextColor3 = T.Text
+					searchBox.PlaceholderColor3 = T.TextHint
+					searchBox.PlaceholderText = "Search options..."
+					searchBox.ClearTextOnFocus = false
+					searchBox.Font = Enum.Font.Gotham
+					searchBox.TextSize = 12
+					searchBox.TextXAlignment = Enum.TextXAlignment.Left
+					searchBox.ZIndex = 32
+					searchBox.Parent = searchWrap
+					corner(searchBox, 5)
+					pad(searchBox, 8, 8, 0, 0)
+					local optionRows = {}
 
 					for _, opt in ipairs(dOpts) do
 						local optRow = mkButton({
+							LayoutOrder      = #optionRows + 1,
 							Size             = UDim2.new(1, 0, 0, 30),
 							BackgroundColor3 = T.SurfaceHover,
 							BackgroundTransparency = selected[opt] and 0.5 or 1,
 							ZIndex           = 31,
 						}, mf)
+						table.insert(optionRows, { option = opt, row = optRow })
 
 						mkLabel({
 							Position       = UDim2.new(0, 28, 0, 0),
@@ -1186,7 +1548,7 @@ local function buildWindow(cfg)
 						optRow.MouseLeave:Connect(function()
 							tw(optRow, { BackgroundTransparency = selected[opt] and 0.5 or 1 })
 						end)
-						optRow.MouseButton1Click:Connect(function()
+						optRow.Activated:Connect(function()
 							if not dMulti then
 								for k in pairs(selected) do selected[k] = false end
 							end
@@ -1199,50 +1561,49 @@ local function buildWindow(cfg)
 									for _, o in ipairs(dOpts) do
 										if selected[o] then vals[#vals+1] = o end
 									end
-									pcall(dCb, vals)
+									callCallback("Dropdown", dCb, vals)
 								else
 									for _, o in ipairs(dOpts) do
-										if selected[o] then pcall(dCb, o); break end
+									if selected[o] then callCallback("Dropdown", dCb, o); break end
 									end
 								end
 							end
+							changed:Fire(getValue())
 							if not dMulti then closeMenu() end
 						end)
 					end
-				end
-
-				ddBtn.MouseButton1Click:Connect(openMenu)
-				UserInputService.InputBegan:Connect(function(inp)
-					if inp.UserInputType ~= Enum.UserInputType.MouseButton1 or not menuOpen then return end
-					task.wait()
-					if menuFrame then
-						local mp = inp.Position
-						local ap = menuFrame.AbsolutePosition
-						local as = menuFrame.AbsoluteSize
-						if not (mp.X >= ap.X and mp.X <= ap.X + as.X and
-								mp.Y >= ap.Y and mp.Y <= ap.Y + as.Y) then
-							closeMenu()
+					searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+						local query = searchBox.Text:lower()
+						for _, entry in ipairs(optionRows) do
+							entry.row.Visible = query == "" or entry.option:lower():find(query, 1, true) ~= nil
 						end
-					end
-				end)
-
-				local ctrl = { _row = row, _name = dName }
-				function ctrl:Get()
-					if dMulti then
-						local r = {}
-						for _, o in ipairs(dOpts) do if selected[o] then r[#r+1] = o end end
-						return r
-					else
-						for _, o in ipairs(dOpts) do if selected[o] then return o end end
-						return nil
-					end
+					end)
 				end
-				function ctrl:Set(v)
+
+				ddBtn.Active = not disabled
+				if disabled then ddBtn.BackgroundTransparency = 0.45 end
+				ddBtn.Activated:Connect(function()
+					if not disabled then openMenu() end
+				end)
+				local ctrl = { _row = row, _name = dName }
+				function ctrl:Get() return getValue() end
+				function ctrl:Changed(callback) return changed:Connect(callback) end
+				function ctrl:Set(v, fire)
 					for k in pairs(selected) do selected[k] = false end
 					if type(v) == "table" then
 						for _, val in ipairs(v) do selected[val] = true end
 					elseif v then selected[tostring(v)] = true end
 					refreshLabel()
+					if fire ~= false then
+						callCallback("Dropdown", dCb, getValue())
+						changed:Fire(getValue())
+					end
+				end
+				function ctrl:SetDisabled(nextDisabled)
+					disabled = nextDisabled == true
+					ddBtn.Active = not disabled
+					ddBtn.BackgroundTransparency = disabled and 0.45 or 0
+					if disabled then closeMenu() end
 				end
 				function ctrl:SetOptions(opts)
 					dOpts = opts
@@ -1253,10 +1614,10 @@ local function buildWindow(cfg)
 					end
 					refreshLabel()
 				end
-				function ctrl:Destroy() row:Destroy() end
+				function ctrl:Destroy() changed:Destroy(); closeMenu(); Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Dropdown")
 				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
@@ -1264,9 +1625,12 @@ local function buildWindow(cfg)
 			-- ── BUTTON ───────────────────────────────────────────────────────
 			function Section:Button(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Button")
+				Validation.warnUnknown(c2, { "Id", "Name", "Text", "Disabled", "Callback" }, "Button")
 				local bName = c2.Name or "Button"
 				local bText = c2.Text or bName
 				local bCb   = c2.Callback
+				local disabled = c2.Disabled == true
 
 				local row = makeRow(bName, 42)
 				rowNameLabel(row, bName)
@@ -1286,22 +1650,30 @@ local function buildWindow(cfg)
 				corner(btn, 6)
 				stroke(btn, 1, T.AccentDark)
 				grad(btn, T.AccentBright, T.AccentDark, 90)
+				btn.Active = not disabled
+				if disabled then btn.BackgroundTransparency = 0.45 end
 
 				btn.MouseEnter:Connect(function() tw(btn, { BackgroundColor3 = T.AccentBright }) end)
 				btn.MouseLeave:Connect(function() tw(btn, { BackgroundColor3 = T.Accent }) end)
-				btn.MouseButton1Click:Connect(function()
+				btn.Activated:Connect(function()
+					if disabled then return end
 					tw(btn, { BackgroundColor3 = T.AccentDark })
 					task.delay(0.08, function() tw(btn, { BackgroundColor3 = T.Accent }) end)
-					if bCb then pcall(bCb) end
+					callCallback("Button", bCb)
 				end)
 
 				local ctrl = { _row = row, _name = bName }
-				function ctrl:Press() if bCb then pcall(bCb) end end
+				function ctrl:Press() if not disabled then callCallback("Button", bCb) end end
 				function ctrl:SetText(t) btn.Text = t end
-				function ctrl:Destroy() row:Destroy() end
+				function ctrl:SetDisabled(nextDisabled)
+					disabled = nextDisabled == true
+					btn.Active = not disabled
+					btn.BackgroundTransparency = disabled and 0.45 or 0
+				end
+				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Button")
 				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
@@ -1309,11 +1681,15 @@ local function buildWindow(cfg)
 			-- ── INPUT ────────────────────────────────────────────────────────
 			function Section:Input(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Input")
+				Validation.warnUnknown(c2, { "Id", "Name", "Placeholder", "Default", "Numeric", "Disabled", "Callback" }, "Input")
 				local iName = c2.Name        or "Input"
 				local iPlc  = c2.Placeholder or ""
 				local iDef  = c2.Default     or ""
 				local iCb   = c2.Callback
 				local iNum  = c2.Numeric     or false
+				local disabled = c2.Disabled == true
+				local changed = Signal.new()
 
 				local row = makeRow(iName, 42)
 				rowNameLabel(row, iName)
@@ -1350,17 +1726,29 @@ local function buildWindow(cfg)
 					if enter then
 						local v = tb.Text
 						if iNum then v = tostring(tonumber(v) or 0); tb.Text = v end
-						if iCb then pcall(iCb, v) end
+						callCallback("Input", iCb, v)
+						changed:Fire(v)
 					end
 				end)
+				tb.TextEditable = not disabled
+				if disabled then wrap.BackgroundTransparency = 0.45 end
 
 				local ctrl = { _row = row, _name = iName }
 				function ctrl:Get() return tb.Text end
-				function ctrl:Set(v) tb.Text = tostring(v) end
-				function ctrl:Destroy() row:Destroy() end
+				function ctrl:Changed(callback) return changed:Connect(callback) end
+				function ctrl:Set(v, fire)
+					tb.Text = tostring(v)
+					if fire ~= false then callCallback("Input", iCb, tb.Text); changed:Fire(tb.Text) end
+				end
+				function ctrl:SetDisabled(nextDisabled)
+					disabled = nextDisabled == true
+					tb.TextEditable = not disabled
+					wrap.BackgroundTransparency = disabled and 0.45 or 0
+				end
+				function ctrl:Destroy() changed:Destroy(); Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Input")
 				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
@@ -1368,6 +1756,7 @@ local function buildWindow(cfg)
 			-- ── LABEL ────────────────────────────────────────────────────────
 			function Section:Label(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Label")
 				local text = c2.Text or ""
 
 				local row = makeRow("_lbl", 34)
@@ -1385,16 +1774,18 @@ local function buildWindow(cfg)
 				local ctrl = { _row = row, _name = text }
 				function ctrl:Set(v) lbl.Text = v end
 				function ctrl:Get() return lbl.Text end
-				function ctrl:Destroy() row:Destroy() end
+				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Label")
 				return ctrl
 			end
 
 			-- ── KEYBIND ──────────────────────────────────────────────────────
 			function Section:Keybind(c2)
 				c2 = c2 or {}
+				Window:_validateControlId(c2, "Keybind")
+				Validation.warnUnknown(c2, { "Id", "Name", "Default", "Disabled", "Callback" }, "Keybind")
 				local kName = c2.Name    or "Keybind"
 				local kDef  = c2.Default or Enum.KeyCode.Unknown
 				local kCb   = c2.Callback
@@ -1424,23 +1815,31 @@ local function buildWindow(cfg)
 				local currentKey = kDef
 				local listening  = false
 				local listenConn = nil
+				local disabled = c2.Disabled == true
+				local changed = Signal.new()
 
-				local function setKey(k)
+				local function setKey(k, fire)
 					currentKey = k
 					kLbl.Text      = k.Name
 					kLbl.TextColor3= T.Text
 					tw(kBtn, { BackgroundColor3 = T.SurfaceHi })
 					stroke(kBtn, 1, T.Border)
-					if kCb then pcall(kCb, k) end
+					if fire ~= false then
+						callCallback("Keybind", kCb, k)
+						changed:Fire(k)
+					end
 				end
 
-				setKey(kDef)
+				setKey(kDef, false)
+				kBtn.Active = not disabled
+				if disabled then kBtn.BackgroundTransparency = 0.45 end
 
-				kBtn.MouseButton1Click:Connect(function()
+				kBtn.Activated:Connect(function()
+					if disabled then return end
 					if listening then
 						listening = false
 						if listenConn then listenConn:Disconnect(); listenConn = nil end
-						setKey(currentKey)
+						setKey(currentKey, false)
 						return
 					end
 					listening       = true
@@ -1449,17 +1848,17 @@ local function buildWindow(cfg)
 					tw(kBtn, { BackgroundColor3 = T.SurfaceHover })
 					stroke(kBtn, 1, T.Accent)
 
-					listenConn = UserInputService.InputBegan:Connect(function(inp)
+					listenConn = windowMaid:Give(UserInputService.InputBegan:Connect(function(inp)
 						if not listening then return end
 						if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
 						listening = false
 						if listenConn then listenConn:Disconnect(); listenConn = nil end
 						if inp.KeyCode == Enum.KeyCode.Escape then
-							setKey(currentKey)
+							setKey(currentKey, false)
 						else
 							setKey(inp.KeyCode)
 						end
-					end)
+					end))
 				end)
 
 				kBtn.MouseEnter:Connect(function()
@@ -1472,10 +1871,26 @@ local function buildWindow(cfg)
 				local ctrl = { _row = row, _name = kName }
 				function ctrl:Get() return currentKey end
 				function ctrl:Set(k) setKey(k) end
-				function ctrl:Destroy() row:Destroy() end
+				function ctrl:Changed(callback) return changed:Connect(callback) end
+				function ctrl:SetDisabled(nextDisabled)
+					disabled = nextDisabled == true
+					kBtn.Active = not disabled
+					kBtn.BackgroundTransparency = disabled and 0.45 or 0
+					if disabled and listening then
+						listening = false
+						if listenConn then listenConn:Disconnect(); listenConn = nil end
+						setKey(currentKey, false)
+					end
+				end
+				function ctrl:Destroy()
+					if listenConn then listenConn:Disconnect(); listenConn = nil end
+					changed:Destroy()
+					Window:_unregisterControl(self)
+					row:Destroy()
+				end
 				function ctrl:SetVisible(v) row.Visible = v end
 
-				table.insert(Window._allElements, ctrl)
+					Window:_registerControl(ctrl, c2, "Keybind")
 				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
@@ -1507,7 +1922,27 @@ end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
 local EmberUI = {}
-function EmberUI:Window(cfg) return buildWindow(cfg or {}) end
+function EmberUI:Window(cfg)
+	cfg = cfg or {}
+	if type(cfg) ~= "table" then error("EmberUI:Window expects a configuration table", 2) end
+	if cfg.Id and cfg.Singleton ~= false then
+		local existing: any = windowManager:Get(cfg.Id)
+		if existing then
+			existing:SetVisible(true)
+			existing:BringToFront()
+			return existing
+		end
+	end
+	local window = buildWindow(cfg)
+	windowManager:Register(cfg.Id, window)
+	return window
+end
 EmberUI.State = State
+EmberUI.Version = require(Root.Version)
+EmberUI.PersistenceManager = PersistenceManager
+function EmberUI:SetTheme(name) themeManager:SetTheme(name) end
+function EmberUI:GetTheme() return themeManager:GetName() end
+function EmberUI:SetReducedMotion(enabled) reducedMotion = enabled == true end
+function EmberUI:GetReducedMotion() return reducedMotion end
 
 return EmberUI
