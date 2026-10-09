@@ -1,32 +1,4 @@
 --!strict
--- Library composition layer. Shared systems live in sibling Core, Layout,
--- Managers, and Theme folders; UI construction remains here during migration.
---[[
-	EmberUI  v2.0.1
-	github.com/ScriptB/EmberUI
-
-	local UI = require(script.Parent.EmberUI)
-	local Win = UI:Window({ Title = "My Hub" })
-	Win:SideButton("Discord", function() end)
-	Win:Notify({ Title = "Ready", Message = "Loaded", Type = "success" })
-
-	local Tab = Win:Tab("Farm")
-	local Sec = Tab:Section("Auto Steal")
-	Sec:Toggle({ Name = "Auto Steal", Default = false, Callback = function(v) end })
-	Sec:Slider({ Name = "Speed", Min = 0, Max = 200, Default = 16, Suffix = " WS" })
-	Sec:Dropdown({ Name = "Areas", Options = {"A","B"}, Multi = true })
-	Sec:Button({ Name = "Go", Text = "Teleport", Callback = function() end })
-	Sec:Input({ Name = "Value", Placeholder = "0..100" })
-	Sec:Label({ Text = "Hello world" })
-	Sec:Keybind({ Name = "Toggle Key", Default = Enum.KeyCode.RightShift })
-
-	local s = UI.State(false)
-	tog:Bind(s)
-
-	Win:Search("filter")
-	Win:Minimize()
-	Win:Destroy()
-]]
 
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -62,7 +34,6 @@ local function callCallback(context, callback, ...)
 	if not ok then reportCallbackError(context, err) end
 end
 
--- ── Theme ─────────────────────────────────────────────────────────────────────
 local T = require(Root.Theme.Tokens)
 local themeManager = ThemeManager.new(T, {
 	["Ember Dark"] = {},
@@ -71,7 +42,6 @@ local themeManager = ThemeManager.new(T, {
 })
 local reducedMotion = false
 
--- ── Tween presets ─────────────────────────────────────────────────────────────
 local TI_FAST   = TweenInfo.new(0.12, Enum.EasingStyle.Quad,   Enum.EasingDirection.Out)
 local TI_MED    = TweenInfo.new(0.22, Enum.EasingStyle.Quad,   Enum.EasingDirection.Out)
 local TI_SPRING = TweenInfo.new(0.28, Enum.EasingStyle.Back,   Enum.EasingDirection.Out)
@@ -85,7 +55,6 @@ local function tw(obj, props, info)
 	TweenService:Create(obj, info or TI_FAST, props):Play()
 end
 
--- ── Primitives ────────────────────────────────────────────────────────────────
 local function corner(p, _r)
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(0, 0)
@@ -93,7 +62,6 @@ local function corner(p, _r)
 	return c
 end
 
--- Removes any existing UIStroke before adding a new one (prevents accumulation)
 local function stroke(p, thick, col, trans)
 	local e = p:FindFirstChildOfClass("UIStroke")
 	if e then e:Destroy() end
@@ -106,7 +74,6 @@ local function stroke(p, thick, col, trans)
 	return s
 end
 
--- Removes any existing UIGradient before adding a new one
 local function textStroke(p)
 	local s = Instance.new("UIStroke")
 	s.Thickness = 1.5
@@ -201,9 +168,6 @@ local function mkButton(props, parent)
 	return b
 end
 
--- Solid-color rectangle that covers rounded corners on one side of a parent frame.
--- Used to make a frame appear to have corners only on the opposite side.
--- parent must have a solid BackgroundColor3 (no gradient) and a UICorner.
 local function fixCorners(parent, side, col, h)
 	h = h or 10
 	local f = Instance.new("Frame")
@@ -219,7 +183,6 @@ local function fixCorners(parent, side, col, h)
 	return f
 end
 
--- ── Dragging ──────────────────────────────────────────────────────────────────
 local function makeDraggable(handle, target, maid, onMove)
 	local dragging = false
 	local lastMouse = nil
@@ -251,12 +214,10 @@ local function makeDraggable(handle, target, maid, onMove)
 	end))
 end
 
--- ── Root ──────────────────────────────────────────────────────────────────────
 local function getRoot()
 	return LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- ── Notification pool ─────────────────────────────────────────────────────────
 local NOTIF_W, NOTIF_H, NOTIF_GAP = 300, 70, 6
 local _notifGui = nil
 local _notifs   = {}
@@ -309,7 +270,6 @@ local function spawnNotif(cfg, ownerMaid)
 	corner(n, 8)
 	stroke(n, 1, T.Border)
 
-	-- Accent bar (left edge)
 	local bar = Instance.new("Frame")
 	bar.Size             = UDim2.new(0, 3, 1, -16)
 	bar.Position         = UDim2.new(0, 0, 0, 8)
@@ -354,7 +314,6 @@ local function spawnNotif(cfg, ownerMaid)
 		ZIndex         = 51,
 	}, n)
 
-	-- Progress drain bar
 	local prog = Instance.new("Frame")
 	prog.AnchorPoint      = Vector2.new(0, 1)
 	prog.Position         = UDim2.new(0, 0, 1, 0)
@@ -383,9 +342,6 @@ local function spawnNotif(cfg, ownerMaid)
 	end)
 end
 
--- ══════════════════════════════════════════════════════════════════════════════
---  buildWindow
--- ══════════════════════════════════════════════════════════════════════════════
 local function buildWindow(cfg)
 	cfg         = cfg or {}
 	if type(cfg) ~= "table" then error("EmberUI:Window expects a configuration table", 2) end
@@ -415,7 +371,6 @@ local function buildWindow(cfg)
 	local SIDEBAR_W = 158
 	local SIDEBAR_GAP = -4
 
-	-- ScreenGui
 	gui = Instance.new("ScreenGui")
 	gui.Name           = "EmberUI_" .. cfg.Title:gsub("%s", "")
 	gui.ResetOnSpawn   = false
@@ -425,7 +380,6 @@ local function buildWindow(cfg)
 	windowMaid:Give(gui)
 	themeManager:Register(gui)
 
-	-- Main frame
 	local win = Instance.new("Frame")
 	win.Name                  = "Window"
 	win.AnchorPoint           = Vector2.new(0.5, 0.5)
@@ -453,7 +407,6 @@ local function buildWindow(cfg)
 		windowMaid:Give(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(clampToViewport))
 	end
 
-	-- ── TopBar ────────────────────────────────────────────────────────────────
 	local topBar = Instance.new("Frame")
 	topBar.Name             = "TopBar"
 	topBar.Size             = UDim2.new(1, 0, 0, TOPBAR_H)
@@ -507,7 +460,6 @@ local function buildWindow(cfg)
 
 	makeDraggable(topBar, win, windowMaid, clampToViewport)
 
-	-- Minimize logic
 	local minimized = false
 	local restoredSize = win.Size
 	local function doMinimize()
@@ -527,7 +479,6 @@ local function buildWindow(cfg)
 	end
 	minimizeBtn.Activated:Connect(doMinimize)
 
-	-- ── Left sidebar (ScrollingFrame for overflow) ────────────────────────────
 	local leftSide = Instance.new("ScrollingFrame")
 	leftSide.Name                   = "LeftSidebar"
 	leftSide.AnchorPoint            = Vector2.new(1, 0)
@@ -543,7 +494,6 @@ local function buildWindow(cfg)
 	leftSide.Parent                 = win
 	list(leftSide, Enum.FillDirection.Vertical, 8)
 
-	-- ── Right sidebar ────────────────────────────────────────────────────────
 	local rightSide = Instance.new("Frame")
 	rightSide.Name                   = "RightSidebar"
 	rightSide.Position               = UDim2.new(1, SIDEBAR_GAP + 10, 0, TOPBAR_H)
@@ -556,7 +506,6 @@ local function buildWindow(cfg)
 	rightSide.Parent                 = win
 	list(rightSide, Enum.FillDirection.Vertical, 8)
 
-	-- ── Content area ─────────────────────────────────────────────────────────
 	local contentArea = mkFrame({
 		Name     = "Content",
 		Position = UDim2.new(0, 0, 0, TOPBAR_H),
@@ -566,8 +515,6 @@ local function buildWindow(cfg)
 
 	local pages = mkFrame({ Name = "Pages", Size = UDim2.new(1, 0, 1, 0) }, contentArea)
 
-	-- ── Search bar ───────────────────────────────────────────────────────────
-	-- Solid SurfaceHi + UICorner(10) + fixCorners("top") = bottom-rounded only
 	local searchBar = Instance.new("Frame")
 	searchBar.Name                  = "SearchBar"
 	searchBar.AnchorPoint           = Vector2.new(0, 1)
@@ -615,9 +562,6 @@ local function buildWindow(cfg)
 	searchBox.ZIndex            = 7
 	searchBox.Parent            = searchBar
 
-	-- ════════════════════════════════════════════════════════════════════════
-	--  Window object
-	-- ════════════════════════════════════════════════════════════════════════
 	Window = {}
 	Window._tabs        = {}
 	Window._activeTab   = nil
@@ -706,7 +650,6 @@ local function buildWindow(cfg)
 		Window:BringToFront()
 	end))
 
-	-- ── SideButton ───────────────────────────────────────────────────────────
 	function Window:SideButton(name2, callback)
 		local btn = mkButton({
 			Name             = name2,
@@ -726,7 +669,6 @@ local function buildWindow(cfg)
 		return btn
 	end
 
-	-- ── Tab ──────────────────────────────────────────────────────────────────
 	function Window:Tab(name2)
 		local Tab = { _btn = nil, _page = nil, _win = Window }
 
@@ -753,7 +695,6 @@ local function buildWindow(cfg)
 		}, tabBtn)
 		textStroke(lbl)
 
-		-- Tab page (scrollable)
 		local page = Instance.new("ScrollingFrame")
 		page.Name                   = name2 .. "_Page"
 		page.Size                   = UDim2.new(1, 0, 1, 0)
@@ -790,11 +731,9 @@ local function buildWindow(cfg)
 		if #Window._tabs == 0 then task.defer(activate) end
 		table.insert(Window._tabs, Tab)
 
-		-- ── Section ──────────────────────────────────────────────────────────
 		function Tab:Section(sname, expanded)
 			if expanded == nil then expanded = true end
 
-			-- Wrapper: solid Surface + UICorner(8) + UIStroke
 			local secWrap = Instance.new("Frame")
 			secWrap.Name                  = sname .. "_Sec"
 			secWrap.Size                  = UDim2.new(1, 0, 0, 0)
@@ -866,7 +805,6 @@ local function buildWindow(cfg)
 				chevLbl.Text = contentFrame.Visible and "v" or ">"
 			end)
 
-			-- ── Section object ────────────────────────────────────────────────
 			local Section = { _content = contentFrame, _elements = {}, _wrap = secWrap }
 			table.insert(Window._sections, Section)
 
@@ -954,7 +892,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── TOGGLE ───────────────────────────────────────────────────────
 			function Section:Toggle(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Toggle")
@@ -1047,7 +984,6 @@ local function buildWindow(cfg)
 					if not disabled then applyToggle(not value) end
 				end)
 
-				-- Runtime-settable note
 				local dynNote = mkLabel({
 					Name           = "_dynNote",
 					Position       = UDim2.new(0, 14, 0, hasNote and 28 or 0),
@@ -1109,7 +1045,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── SLIDER ───────────────────────────────────────────────────────
 			function Section:Slider(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Slider")
@@ -1284,7 +1219,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── DROPDOWN ─────────────────────────────────────────────────────
 			function Section:Dropdown(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Dropdown")
@@ -1419,7 +1353,6 @@ local function buildWindow(cfg)
 
 																				local searchWrap = mkFrame({ Size = UDim2.new(1, 0, 0, 34), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = T.Surface }, menuContainer)
 																				corner(searchWrap, 7)
-																				-- Fix bottom corners of searchWrap so it blends with the container
 																				fixCorners(searchWrap, "bottom", T.Surface, 7)
 																				
 																				local searchBox = Instance.new("TextBox")
@@ -1438,7 +1371,6 @@ local function buildWindow(cfg)
 																				corner(searchBox, 5)
 																				pad(searchBox, 8, 8, 0, 0)
 																				
-																				-- Separator line
 																				mkFrame({
 																								AnchorPoint = Vector2.new(0, 1),
 																								Position = UDim2.new(0, 0, 1, 0),
@@ -1574,7 +1506,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── BUTTON ───────────────────────────────────────────────────────
 			function Section:Button(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Button")
@@ -1643,7 +1574,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── INPUT ────────────────────────────────────────────────────────
 			function Section:Input(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Input")
@@ -1718,7 +1648,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── LABEL ────────────────────────────────────────────────────────
 			function Section:Label(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Label")
@@ -1746,7 +1675,6 @@ local function buildWindow(cfg)
 				return ctrl
 			end
 
-			-- ── KEYBIND ──────────────────────────────────────────────────────
 			function Section:Keybind(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Keybind")
@@ -1956,7 +1884,6 @@ local function buildWindow(cfg)
 		return Tab
 	end
 
-	-- ── Search ───────────────────────────────────────────────────────────────
 	local function applySearch(query)
 		local q = query:lower()
 		for _, el in ipairs(Window._allElements) do
@@ -1991,7 +1918,6 @@ local function buildWindow(cfg)
 	return Window
 end
 
--- ── Public API ────────────────────────────────────────────────────────────────
 local EmberUI = {}
 function EmberUI:Window(cfg)
 	cfg = cfg or {}
