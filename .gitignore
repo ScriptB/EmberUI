@@ -1,0 +1,8 @@
+# Rojo
+*.rbxlx
+*.rbxl
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

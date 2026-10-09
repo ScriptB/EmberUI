@@ -1,0 +1,20 @@
+{
+  "name": "EmberUI",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "EmberUI": {
+        "$path": "src/EmberUI.lua"
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "EmberDemo": {
+          "$path": "example/Demo.client.luau"
+        }
+      }
+    }
+  }
+}
