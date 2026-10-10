@@ -16,8 +16,8 @@ function OverlayManager.new(maid)
 		end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
 		task.defer(function()
-			current = self._top
-			if not current or not current.frame.Parent then return end
+			if self._top ~= current then return end
+			if not current.frame.Parent then return end
 			local point, position, size = input.Position, current.frame.AbsolutePosition, current.frame.AbsoluteSize
 			if point.X < position.X or point.X > position.X + size.X or point.Y < position.Y or point.Y > position.Y + size.Y then
 				self:CloseTop()

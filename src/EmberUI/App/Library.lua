@@ -1,4 +1,4 @@
---!strict
+﻿--!strict
 
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -434,7 +434,7 @@ local function buildWindow(cfg)
 		Position         = UDim2.new(1, -64, 0.5, 0),
 		AnchorPoint      = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
-		Text             = "—",
+		Text             = "â€”",
 		TextSize         = 16,
 		Font             = Enum.Font.GothamBlack,
 		TextColor3       = T.Text,
@@ -448,7 +448,7 @@ local function buildWindow(cfg)
 		Position         = UDim2.new(1, -32, 0.5, 0),
 		AnchorPoint      = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
-		Text             = "✕",
+		Text             = "âœ•",
 		TextSize         = 14,
 		Font             = Enum.Font.GothamBlack,
 		TextColor3       = T.Text,
@@ -628,7 +628,7 @@ local function buildWindow(cfg)
 	function Window:GetPosition() return win.Position end
 	function Window:GetSize() return win.Size end
 	function Window:SetScale(scale)
-		if type(scale) ~= "number" or scale < 0.75 or scale > 1.5 then error("EmberUI Window:SetScale expects 0.75–1.5", 2) end
+		if type(scale) ~= "number" or scale < 0.75 or scale > 1.5 then error("EmberUI Window:SetScale expects 0.75â€“1.5", 2) end
 		uiScale.Scale = scale
 		clampToViewport()
 	end
@@ -1413,8 +1413,8 @@ local function buildWindow(cfg)
 																												if not row then
 																																row = mkButton({ Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.SurfaceHover, BackgroundTransparency = 0.2, ZIndex = 31 }, mf)
 																																stroke(row, 1, T.Border)
-																																local lbl = mkLabel({ Position = UDim2.new(0, 28, 0, 0), Size = UDim2.new(1, -34, 1, 0), TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 32 }, row)
-																																local tick = mkLabel({ Position = UDim2.new(0, 8, 0, 0), Size = UDim2.new(0, 18, 1, 0), TextSize = 12, TextColor3 = T.On, Font = Enum.Font.GothamBlack, ZIndex = 32 }, row)
+																																local lbl = mkLabel({ Text = "", Position = UDim2.new(0, 28, 0, 0), Size = UDim2.new(1, -34, 1, 0), TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 32 }, row)
+																																local tick = mkLabel({ Text = "", Position = UDim2.new(0, 8, 0, 0), Size = UDim2.new(0, 18, 1, 0), TextSize = 12, TextColor3 = T.On, Font = Enum.Font.GothamBlack, ZIndex = 32 }, row)
 
 																																row.MouseEnter:Connect(function() tw(row, { BackgroundTransparency = 0 }) end)
 																																row.MouseLeave:Connect(function() tw(row, { BackgroundTransparency = selected[row._opt] and 0 or 0.2 }) end)
@@ -1442,7 +1442,7 @@ local function buildWindow(cfg)
 																												row.Visible = true
 																												row._opt = opt
 																												row._lbl.Text = opt
-																												row._tick.Text = selected[opt] and "✓" or ""
+																												row._tick.Text = selected[opt] and "âœ“" or ""
 																												row.BackgroundTransparency = selected[opt] and 0 or 0.2
 																												row.Position = UDim2.new(0, 0, 0, virtualList:GetOffset(i))
 																								end
