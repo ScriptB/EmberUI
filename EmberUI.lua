@@ -1244,12 +1244,21 @@ local function buildWindow(cfg)
 	end
 	function Window:GetScale() return uiScale.Scale end
 	function Window:GetBreakpoint() return Breakpoints.Get(win.AbsoluteSize.X) end
+	local COMPACT_SIDEBAR_W = 52
+	local function reflowSidebar(bp)
+		local narrow = (bp == "Compact")
+		leftSide.Size = UDim2.new(0, narrow and COMPACT_SIDEBAR_W or SIDEBAR_W, 1, -TOPBAR_H)
+		for _, tab in ipairs(Window._tabs) do
+			if tab._lbl then tab._lbl.Visible = not narrow end
+		end
+	end
 	local breakpointChanged = Signal.new()
 	local currentBreakpoint = Window:GetBreakpoint()
 	windowMaid:Give(win:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 		local nextBreakpoint = Window:GetBreakpoint()
 		if nextBreakpoint ~= currentBreakpoint then
 			currentBreakpoint = nextBreakpoint
+			reflowSidebar(nextBreakpoint)
 			breakpointChanged:Fire(nextBreakpoint)
 		end
 	end))
@@ -1310,6 +1319,7 @@ local function buildWindow(cfg)
 			ZIndex         = 5,
 		}, tabBtn)
 		textStroke(lbl)
+		Tab._lbl = lbl
 
 		local tabHov = Instance.new("Frame")
 		tabHov.Size                   = UDim2.new(1, 0, 1, 0)

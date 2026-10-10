@@ -20,15 +20,24 @@ Audited against `src/EmberUI.lua` on 2026-10-09.
 | `Window:Minimize()` / `Toggle()` / `Destroy()` | Basic window actions | Keep; expand lifecycle semantics |
 | `EmberUI.State(default)` | `Get`, `Set`, `Sub` | Redesign around `Subscribe`; retain `Sub` adapter |
 
-## Confirmed gaps
+## Confirmed gaps (v2 baseline)
 
-- Window sizing is fixed; no resize implementation exists.
-- Dropdowns do not have a search field or virtualisation.
+These were the known gaps at the v2 baseline. See CHANGELOG.md for v3 fix status.
+
+- ~~Window sizing is fixed; no resize implementation exists.~~ Fixed in v3 (B3 — bottom-right drag handle, min 300×200, UIScale-corrected).
+- Dropdown live search and virtualisation — search field added in v3; virtualisation remains v3 future work.
 - Mouse is the only complete interaction path.
-- No public `Changed`, `SetDisabled`, or uniform stateful handle contract exists.
-- v2 previously placed long-lived input listeners outside a lifecycle owner. The Phase 2 hotfix starts correcting this at window scope.
-- The library used executor/CoreGui fallbacks. The hotfix now mounts only to `PlayerGui`.
+- ~~No public `Changed`, `SetDisabled`, or uniform stateful handle contract exists.~~ Partial: `Changed` and `SetVisible` added; `SetDisabled` on Toggle/Slider/Button/Input/Dropdown added in v3.
+- Long-lived input listeners — corrected in v3 (all listeners registered through `windowMaid`).
+- ~~Mount order: hotfix mounted only to `PlayerGui`.~~ v3 restores full chain: `gethui()` → CoreGui → PlayerGui, with `protect_gui` called before parenting.
 
-## Supported v2 platform baseline
+## Remaining v3 work
 
-Roblox client UI mounted through `Players.LocalPlayer.PlayerGui`; desktop mouse is the currently verified interaction mode. Touch, keyboard, gamepad, responsive breakpoints, and persistence are v3 work and are not advertised as implemented.
+- Keyboard and gamepad navigation throughout.
+- Full page reflow (v3 adds sidebar collapse at Compact breakpoint; multi-column content reflow is future work).
+- Persistence beyond the in-memory `MemoryAdapter`.
+- Keybind redesign (current implementation is functional but not redesigned).
+
+## Supported v3 platform baseline
+
+Roblox client UI mounted through `gethui()` → CoreGui → PlayerGui with `protect_gui` when available. Desktop mouse and touch input supported. Responsive sidebar collapse fires at the Compact breakpoint (window width < 520 px). Keyboard/gamepad, full content reflow, and persistence remain future work.
