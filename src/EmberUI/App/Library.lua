@@ -372,8 +372,8 @@ local function buildWindow(cfg)
 	gui.ResetOnSpawn   = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.IgnoreGuiInset = true
-	gui.Parent         = getRoot()
 	if type(protect_gui) == "function" then pcall(protect_gui, gui) end
+	gui.Parent         = getRoot()
 	windowMaid:Give(gui)
 	themeManager:Register(gui)
 
@@ -500,8 +500,9 @@ local function buildWindow(cfg)
 			if inp.UserInputType ~= Enum.UserInputType.MouseMovement and inp.UserInputType ~= Enum.UserInputType.Touch then return end
 			local mouse = UserInputService:GetMouseLocation()
 			local delta = mouse - rStartMouse
-			local newW  = math.max(MIN_W, rStartSize.X + delta.X)
-			local newH  = math.max(MIN_H, rStartSize.Y + delta.Y)
+			local sc    = uiScale.Scale
+			local newW  = math.max(MIN_W, (rStartSize.X + delta.X) / sc)
+			local newH  = math.max(MIN_H, (rStartSize.Y + delta.Y) / sc)
 			win.Size    = UDim2.new(0, newW, 0, newH)
 			clampToViewport()
 		end))
