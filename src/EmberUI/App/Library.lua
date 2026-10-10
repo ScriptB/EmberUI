@@ -77,7 +77,7 @@ end
 local function textStroke(p)
 	local s = Instance.new("UIStroke")
 	s.Thickness    = 1.0
-	s.Color        = Color3.fromRGB(0, 0, 0)
+	s.Color        = T.Border
 	s.Transparency = 0.25
 	s.Parent       = p
 	return s
@@ -403,6 +403,11 @@ local function buildWindow(cfg)
 		local camera = workspace.CurrentCamera
 		if not camera then return end
 		local viewport = camera.ViewportSize
+		local scaleTarget = cfg.Scale or 1
+		if viewport.X > 0 and win.Size.X.Offset > 0 then
+			local maxScale = math.min(scaleTarget, (viewport.X * 0.92) / win.Size.X.Offset)
+			if maxScale < uiScale.Scale then uiScale.Scale = maxScale end
+		end
 		local halfWidth = math.max(0, (viewport.X - win.AbsoluteSize.X) / 2)
 		local halfHeight = math.max(0, (viewport.Y - win.AbsoluteSize.Y) / 2)
 		win.Position = UDim2.new(win.Position.X.Scale, math.clamp(win.Position.X.Offset, -halfWidth, halfWidth), win.Position.Y.Scale, math.clamp(win.Position.Y.Offset, -halfHeight, halfHeight))
@@ -415,7 +420,7 @@ local function buildWindow(cfg)
 	local topBar = Instance.new("Frame")
 	topBar.Name             = "TopBar"
 	topBar.Size             = UDim2.new(1, 0, 0, TOPBAR_H)
-	topBar.BackgroundColor3 = Color3.new(1, 1, 1)
+	topBar.BackgroundColor3 = T.Accent
 	topBar.ZIndex           = 6
 	topBar.Parent           = win
 	corner(topBar, 3)
@@ -583,13 +588,14 @@ local function buildWindow(cfg)
 
 	function Window:_validateControlId(config, kind)
 		local id = config.Id
-		if id == nil then return end
+		if id == nil then return nil end
 		if type(id) ~= "string" or id == "" then
 			error(("EmberUI %s Id must be a non-empty string"):format(kind), 3)
 		end
 		if self._ids[id] then
-			error(("EmberUI duplicate control Id '%s'"):format(id), 3)
+			return self._ids[id]
 		end
+		return nil
 	end
 
 	function Window:_registerControl(ctrl, config, kind)
@@ -597,9 +603,6 @@ local function buildWindow(cfg)
 		if id ~= nil then
 			if type(id) ~= "string" or id == "" then
 				error(("EmberUI %s Id must be a non-empty string"):format(kind), 3)
-			end
-			if self._ids[id] then
-				error(("EmberUI duplicate control Id '%s'"):format(id), 3)
 			end
 			self._ids[id] = ctrl
 			ctrl.Id = id
@@ -870,7 +873,7 @@ local function buildWindow(cfg)
 
 			function Section:Separator(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Separator")
+				local _existing = Window:_validateControlId(c2, "Separator"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Visible" }, "Separator")
 				local row = makeRow("Separator", 13)
 				row.BackgroundTransparency = 1
@@ -885,7 +888,7 @@ local function buildWindow(cfg)
 
 			function Section:Spacer(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Spacer")
+				local _existing = Window:_validateControlId(c2, "Spacer"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Height", "Visible" }, "Spacer")
 				local height = c2.Height or 8
 				if type(height) ~= "number" or height < 0 then error("EmberUI Spacer Height must be a non-negative number", 2) end
@@ -901,7 +904,7 @@ local function buildWindow(cfg)
 
 			function Section:Progress(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Progress")
+				local _existing = Window:_validateControlId(c2, "Progress"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Value", "Visible" }, "Progress")
 				local value = math.clamp(tonumber(c2.Value) or 0, 0, 1)
 				local changed = Signal.new()
@@ -929,7 +932,7 @@ local function buildWindow(cfg)
 
 			function Section:Toggle(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Toggle")
+				local _existing = Window:_validateControlId(c2, "Toggle"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Note", "Default", "Disabled", "Callback" }, "Toggle")
 				local tName  = c2.Name     or "Toggle"
 				local tDef   = c2.Default  or false
@@ -963,7 +966,7 @@ local function buildWindow(cfg)
 				track.AnchorPoint      = Vector2.new(1, 0.5)
 				track.Position         = UDim2.new(1, -12, 0.5, 0)
 				track.Size             = UDim2.new(0, TRACK_W, 0, TRACK_H)
-				track.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+				track.BackgroundColor3 = T.SurfaceHover
 				track.ZIndex           = 7
 				track.Parent           = row
 				corner(track, 11)
@@ -973,7 +976,7 @@ local function buildWindow(cfg)
 				knob.AnchorPoint      = Vector2.new(0, 0.5)
 				knob.Position         = UDim2.new(0, 3, 0.5, 0)
 				knob.Size             = UDim2.new(0, KNOB_S, 0, KNOB_S)
-				knob.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+				knob.BackgroundColor3 = T.OffDark
 				knob.ZIndex           = 8
 				knob.Parent           = track
 				corner(knob, 8)
@@ -1000,12 +1003,12 @@ local function buildWindow(cfg)
 						g.Color    = ColorSequence.new(T.On, T.OnDark)
 						g.Rotation = 90
 						g.Parent   = track
-						tw(knob, { Position = onPos, BackgroundColor3 = Color3.fromRGB(255, 255, 255) }, TI_FAST)
+						tw(knob, { Position = onPos, BackgroundColor3 = T.OnBright }, TI_FAST)
 					else
 						local e = track:FindFirstChildOfClass("UIGradient")
 						if e then e:Destroy() end
-						track.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-						tw(knob, { Position = offPos, BackgroundColor3 = Color3.fromRGB(120, 120, 120) }, TI_FAST)
+						track.BackgroundColor3 = T.SurfaceHover
+						tw(knob, { Position = offPos, BackgroundColor3 = T.OffDark }, TI_FAST)
 					end
 					if fire ~= false then
 						callCallback("Toggle", tCb, v)
@@ -1084,7 +1087,7 @@ local function buildWindow(cfg)
 
 			function Section:Slider(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Slider")
+				local _existing = Window:_validateControlId(c2, "Slider"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Min", "Max", "Decimals", "Suffix", "Default", "Disabled", "Callback" }, "Slider")
 				local sName   = c2.Name     or "Slider"
 				local sMin    = c2.Min      or 0
@@ -1139,7 +1142,7 @@ local function buildWindow(cfg)
 
 				local trackFill = Instance.new("Frame")
 				trackFill.Size             = UDim2.new(0, 0, 1, 0)
-				trackFill.BackgroundColor3 = Color3.new(1, 1, 1)
+				trackFill.BackgroundColor3 = T.Accent
 				trackFill.ZIndex           = 7
 				trackFill.Parent           = trackBg
 				corner(trackFill, 3)
@@ -1194,7 +1197,7 @@ local function buildWindow(cfg)
 				hitArea.InputBegan:Connect(function(inp)
 					if not disabled and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
 						dragging = true
-						tw(handle, { Size = UDim2.new(0, 17, 0, 17), BackgroundColor3 = Color3.fromRGB(255, 193, 194) }, TI_FAST)
+						tw(handle, { Size = UDim2.new(0, 17, 0, 17), BackgroundColor3 = T.AccentBright }, TI_FAST)
 						setFromX(inp.Position.X)
 					elseif not disabled and inp.UserInputType == Enum.UserInputType.Keyboard and (inp.KeyCode == Enum.KeyCode.Left or inp.KeyCode == Enum.KeyCode.Right) then
 						local step = 1 / (10 ^ sDec)
@@ -1258,7 +1261,7 @@ local function buildWindow(cfg)
 
 			function Section:Dropdown(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Dropdown")
+				local _existing = Window:_validateControlId(c2, "Dropdown"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Options", "Multi", "Default", "Disabled", "Callback" }, "Dropdown")
 				local dName    = c2.Name    or "Dropdown"
 				local rawOpts  = c2.Options or {}
@@ -1559,7 +1562,7 @@ local function buildWindow(cfg)
 
 			function Section:Button(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Button")
+				local _existing = Window:_validateControlId(c2, "Button"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Text", "Disabled", "Callback" }, "Button")
 				local bName = c2.Name or "Button"
 				local bText = c2.Text or bName
@@ -1627,7 +1630,7 @@ local function buildWindow(cfg)
 
 			function Section:Input(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Input")
+				local _existing = Window:_validateControlId(c2, "Input"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Placeholder", "Default", "Numeric", "Disabled", "Callback" }, "Input")
 				local iName = c2.Name        or "Input"
 				local iPlc  = c2.Placeholder or ""
@@ -1699,7 +1702,7 @@ local function buildWindow(cfg)
 
 			function Section:Label(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Label")
+				local _existing = Window:_validateControlId(c2, "Label"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Text", "Visible" }, "Label")
 				local text = c2.Text or ""
 
@@ -1731,7 +1734,7 @@ local function buildWindow(cfg)
 
 			function Section:Keybind(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "Keybind")
+				local _existing = Window:_validateControlId(c2, "Keybind"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Default", "Disabled", "Callback" }, "Keybind")
 				local kName = c2.Name    or "Keybind"
 				local kDef  = c2.Default or Enum.KeyCode.Unknown
@@ -1844,7 +1847,7 @@ local function buildWindow(cfg)
 
 			function Section:ImageList(c2)
 				c2 = c2 or {}
-				Window:_validateControlId(c2, "ImageList")
+				local _existing = Window:_validateControlId(c2, "ImageList"); if _existing then return _existing end
 				Validation.warnUnknown(c2, { "Id", "Name", "Items", "Columns", "ImageSize", "Callback" }, "ImageList")
 				local iName   = c2.Name      or "Images"
 				local items   = c2.Items     or {}
