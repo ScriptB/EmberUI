@@ -1,4 +1,4 @@
-﻿--!strict
+--!strict
 
 local Maid = (function()
 local Maid = {}

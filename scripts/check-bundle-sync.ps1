@@ -5,6 +5,11 @@ $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $bundle = Join-Path $root "EmberUI.lua"
+$bundleBytes = [System.IO.File]::ReadAllBytes($bundle)
+if ($bundleBytes.Length -ge 3 -and $bundleBytes[0] -eq 0xEF -and $bundleBytes[1] -eq 0xBB -and $bundleBytes[2] -eq 0xBF) {
+    Write-Error "BUNDLE OUT OF SYNC: EmberUI.lua must not start with a UTF-8 BOM; executor loadstring() rejects U+FEFF."
+    exit 1
+}
 $bundleContent = Get-Content $bundle -Raw -Encoding UTF8
 
 $failures = 0
