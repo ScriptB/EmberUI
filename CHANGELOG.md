@@ -88,6 +88,27 @@ Commits: `4d1c3ae`, `e42f172`, `e5f09fc`.
 
 ---
 
+---
+
+### Post-pass improvements (2026-10-10)
+
+Commits: `fe0e80a`, `162af08`, `c610ed6`, `d1211bf` — additional quality and capability work after the four-pass audit.
+
+| Area | Change |
+|---|---|
+| protect_gui coverage | `popupGui` and `notifGui` (ensureNotifGui) also call `protect_gui` before parenting — two missed ScreenGui sites from Pass 4 |
+| Notification leak | `_notifs` entry now removed from the array when `ownerMaid` destroys a notification frame; prevents stale refs accumulating |
+| Persistence | `PersistenceManager.FileAdapter(prefix)` — uses executor `writefile`/`readfile` and `HttpService:JSONEncode/Decode`; graceful no-op when executor globals absent |
+| Window convenience | `Window:SaveSettings()` — collects all Id-tagged control values into a plain table; `Window:LoadSettings(values)` — restores them; no persistence manager required |
+| Keybind | `startListening()` extracted so `_activate` can call it; listen connections no longer accumulate in `windowMaid`; `MouseLeave` hover state fixed (`T.SurfaceHi` not `T.SurfaceHover`); `ctrl:Clear()` resets to `Enum.KeyCode.Unknown` |
+| Keyboard navigation | Tab / Shift+Tab cycles a `UIStroke` focus ring across `_focusable` controls (Toggle, Button, Keybind); Enter/Space activates the focused control; `Window:ClearFocus()` exposed; mouse click clears focus |
+| Gamepad navigation | DPadDown/Up cycles focus; ButtonA activates; ButtonB clears focus; covers Gamepad1–4 |
+| Multi-column reflow | At Wide/Expanded, sections redistribute alternately into `colLeft`/`colRight` ScrollingFrame columns; `reflowColumns()` also called on every breakpoint change; sections added after a wide-mode transition land in the correct column immediately; single-column restores at Compact/Standard |
+
+All four items previously listed in `docs/v2-audit.md` under **Remaining v3 work** are now closed.
+
+---
+
 ### Testing note
 
-No Roblox Studio instance was connected during this session. All verification is static: file reads, `Grep` pattern checks, and `scripts/check-bundle-sync.ps1` (32/32 pass). Runtime behavior requires loading `EmberUI.lua` in a Roblox executor or `src/EmberUI` via Rojo in Studio.
+No Roblox executor was available during this session. EmberUI loads via `loadstring()` in a live Roblox game client — the correct test environment is an executor (Synapse X, Fluxus, KRNL, etc.), not Roblox Studio. Verification is static: `scripts/check-bundle-sync.ps1` (67/67 pattern checks across both source and bundle) and `scripts/test_logic.luau` (79/79 Lune logic tests covering Signal, State, Maid, Validation, Breakpoints, theme tokens, control Id deduplication, numeric filter, persistence manager, keyboard/gamepad nav logic, column reflow, Save/LoadSettings patterns). Runtime rendering and input response require a live executor session.
