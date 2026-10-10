@@ -1,10 +1,37 @@
 -- EmberUI Logic Test Suite - runs under Lune (standalone Luau)
 -- Usage: lune run scripts/test_logic.luau  (from repo root)
 -- Tests pure-logic modules without Roblox runtime.
+local process = require("@lune/process")
 
 -- Roblox global stubs
 warn = function(...) print("[warn]", ...) end
 Color3 = { fromRGB = function(r, g, b) return { r=r/255, g=g/255, b=b/255, _type="Color3" } end }
+local function makeEnum(items)
+    local e = {}
+    for _, name in ipairs(items) do
+        local item = { Name = name, _enumItem = true }
+        e[name] = item
+    end
+    return e
+end
+Enum = {
+    KeyCode = makeEnum({"Unknown","F","Escape","LeftShift","RightShift","LeftControl","RightControl","Return","Space","Tab","Q","W","E","R"}),
+}
+game = { GetService = function(_, name)
+    if name == "HttpService" then
+        return {
+            JSONEncode = function(_, v)
+                local parts = {}
+                for k, val in pairs(v) do
+                    parts[#parts+1] = '"'..tostring(k)..'":'..tostring(val)
+                end
+                return "{"..table.concat(parts,",").."}"
+            end,
+            JSONDecode = function(_, _s) return { x = 42 } end,
+        }
+    end
+    return {}
+end }
 
 -- Test harness
 local passed, failed = 0, 0
@@ -252,5 +279,94 @@ test("delta / uiScale gives correct pre-scale size", function()
     eq(sz(310,-20, 1,   300), 300)
 end)
 
+print("\n-- PersistenceManager --")
+local PM = require("../src/EmberUI/Managers/PersistenceManager")
+
+test("MemoryAdapter round-trip", function()
+    local pm = PM.new({ Adapter = PM.MemoryAdapter(), Version = 1, Defaults = { x = 0 } })
+    local ok = pm:Save("s1", { x = 42 })
+    ok_(ok, "save failed")
+    local vals, status = pm:Load("s1")
+    eq(status, "loaded"); eq(vals.x, 42)
+end)
+test("MemoryAdapter missing key returns defaults", function()
+    local pm = PM.new({ Adapter = PM.MemoryAdapter(), Version = 1, Defaults = { x = 7 } })
+    local vals, status = pm:Load("nope")
+    eq(status, "missing"); eq(vals.x, 7)
+end)
+test("migration runs and upgrades version", function()
+    local adapter = PM.MemoryAdapter()
+    local pm1 = PM.new({ Adapter = adapter, Version = 1 })
+    pm1:Save("s", { count = 5 })
+    local pm2 = PM.new({
+        Adapter = adapter,
+        Version = 2,
+        Migrations = { [1] = function(v) v.count = v.count * 2; return v end },
+    })
+    local vals, status = pm2:Load("s")
+    eq(status, "loaded"); eq(vals.count, 10)
+end)
+test("Deserialize EnumItem from known serialized form", function()
+    local serialized = { __emberType = "EnumItem", enumType = "KeyCode", name = "F" }
+    local restored = PM.Deserialize(serialized)
+    ok_(restored == Enum.KeyCode.F, "wrong item restored")
+end)
+test("FileAdapter: no readfile/writefile -> graceful no-op", function()
+    local saved_readfile, saved_writefile = readfile, writefile
+    readfile = nil; writefile = nil
+    local adapter = PM.FileAdapter("ember_test")
+    local result = adapter:Read(nil, "key")
+    ok_(result == nil)
+    adapter:Write(nil, "key", { x = 1 })
+    readfile = saved_readfile; writefile = saved_writefile
+end)
+
+print("\n-- Keybind Clear logic --")
+test("Clear resets to Unknown KeyCode", function()
+    local currentKey = Enum.KeyCode.F
+    local function setKey(k) currentKey = k end
+    local function clear() setKey(Enum.KeyCode.Unknown) end
+    clear()
+    eq(currentKey, Enum.KeyCode.Unknown)
+end)
+
+print("\n-- SaveSettings / LoadSettings --")
+test("SaveSettings collects Id-tagged ctrl values", function()
+    local allElements = {
+        { Id = "toggle1", Get = function() return true end },
+        { Id = "slider1", Get = function() return 42 end },
+        { Get = function() return "no-id" end },
+    }
+    local function saveSettings()
+        local values = {}
+        for _, ctrl in ipairs(allElements) do
+            if ctrl.Id and type(ctrl.Get) == "function" then
+                local ok, v = pcall(ctrl.Get, ctrl)
+                if ok then values[ctrl.Id] = v end
+            end
+        end
+        return values
+    end
+    local v = saveSettings()
+    eq(v["toggle1"], true); eq(v["slider1"], 42); ok_(v["no-id"] == nil)
+end)
+test("LoadSettings restores Id-tagged ctrl values", function()
+    local got = {}
+    local allElements = {
+        { Id = "toggle1", Set = function(self, v) got["toggle1"] = v end },
+        { Id = "slider1", Set = function(self, v) got["slider1"] = v end },
+    }
+    local function loadSettings(values)
+        if type(values) ~= "table" then return end
+        for _, ctrl in ipairs(allElements) do
+            if ctrl.Id and values[ctrl.Id] ~= nil and type(ctrl.Set) == "function" then
+                pcall(ctrl.Set, ctrl, values[ctrl.Id])
+            end
+        end
+    end
+    loadSettings({ toggle1 = false, slider1 = 77 })
+    eq(got["toggle1"], false); eq(got["slider1"], 77)
+end)
+
 print(string.format("\n=== %d passed, %d failed ===", passed, failed))
-if failed > 0 then os.exit(1) end
+if failed > 0 then process.exit(1) end

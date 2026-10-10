@@ -40,6 +40,30 @@ function PersistenceManager.MemoryAdapter()
 	}
 end
 
+function PersistenceManager.FileAdapter(prefix)
+	if type(prefix) ~= "string" or prefix == "" then
+		error("EmberUI FileAdapter requires a non-empty prefix string", 2)
+	end
+	local HttpService = game:GetService("HttpService")
+	return {
+		Read = function(_, key)
+			if type(readfile) ~= "function" then return nil end
+			local path = prefix .. "_" .. key .. ".json"
+			local ok, raw = pcall(readfile, path)
+			if not ok or type(raw) ~= "string" or raw == "" then return nil end
+			local ok2, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+			return ok2 and decoded or nil
+		end,
+		Write = function(_, key, value)
+			if type(writefile) ~= "function" then return end
+			local path = prefix .. "_" .. key .. ".json"
+			local ok, encoded = pcall(function() return HttpService:JSONEncode(value) end)
+			if not ok then return end
+			pcall(writefile, path, encoded)
+		end,
+	}
+end
+
 function PersistenceManager.new(options)
 	options = options or {}
 	if not options.Adapter then error("EmberUI PersistenceManager requires an Adapter", 2) end

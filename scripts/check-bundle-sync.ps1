@@ -57,6 +57,13 @@ Check-Signature "R1 tab._lbl stored"      'Tab._lbl = lbl'
 Check-Signature "protect_gui notifGui"    'if type(protect_gui) == "function" then pcall(protect_gui, g) end'
 Check-Signature "protect_gui popupGui"    'if type(protect_gui) == "function" then pcall(protect_gui, popupGui) end'
 Check-Signature "notif _notifs cleanup"   'ownerMaid:Give(function()'
+Check-Signature "FileAdapter function"    'function PersistenceManager.FileAdapter(prefix)'
+Check-Signature "FileAdapter readfile"    'if type(readfile) ~= "function" then return nil end'
+Check-Signature "FileAdapter writefile"  'if type(writefile) ~= "function" then return end'
+Check-Signature "SaveSettings function"  'function Window:SaveSettings()'
+Check-Signature "LoadSettings function"  'function Window:LoadSettings(values)'
+Check-Signature "Keybind MouseLeave SurfaceHi" 'if not listening then tw(kBtn, { BackgroundColor3 = T.SurfaceHi }) end'
+Check-Signature "Keybind ctrl:Clear"     'function ctrl:Clear() setKey(Enum.KeyCode.Unknown) end'
 
 if ($failures -gt 0) {
     Write-Error "$failures sync check(s) failed. Edit EmberUI.lua to match the source files in src/."

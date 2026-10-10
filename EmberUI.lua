@@ -402,6 +402,30 @@ function PersistenceManager.MemoryAdapter()
 	}
 end
 
+function PersistenceManager.FileAdapter(prefix)
+	if type(prefix) ~= "string" or prefix == "" then
+		error("EmberUI FileAdapter requires a non-empty prefix string", 2)
+	end
+	local HttpService = game:GetService("HttpService")
+	return {
+		Read = function(_, key)
+			if type(readfile) ~= "function" then return nil end
+			local path = prefix .. "_" .. key .. ".json"
+			local ok, raw = pcall(readfile, path)
+			if not ok or type(raw) ~= "string" or raw == "" then return nil end
+			local ok2, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+			return ok2 and decoded or nil
+		end,
+		Write = function(_, key, value)
+			if type(writefile) ~= "function" then return end
+			local path = prefix .. "_" .. key .. ".json"
+			local ok, encoded = pcall(function() return HttpService:JSONEncode(value) end)
+			if not ok then return end
+			pcall(writefile, path, encoded)
+		end,
+	}
+end
+
 function PersistenceManager.new(options)
 	options = options or {}
 	if not options.Adapter then error("EmberUI PersistenceManager requires an Adapter", 2) end
@@ -1273,6 +1297,25 @@ local function buildWindow(cfg)
 	end))
 	function Window:BreakpointChanged(callback) return breakpointChanged:Connect(callback) end
 	windowMaid:Give(function() breakpointChanged:Destroy() end)
+
+	function Window:SaveSettings()
+		local values = {}
+		for _, ctrl in ipairs(self._allElements) do
+			if ctrl.Id and type(ctrl.Get) == "function" then
+				local ok, v = pcall(ctrl.Get, ctrl)
+				if ok then values[ctrl.Id] = v end
+			end
+		end
+		return values
+	end
+	function Window:LoadSettings(values)
+		if type(values) ~= "table" then return end
+		for _, ctrl in ipairs(self._allElements) do
+			if ctrl.Id and values[ctrl.Id] ~= nil and type(ctrl.Set) == "function" then
+				pcall(ctrl.Set, ctrl, values[ctrl.Id])
+			end
+		end
+	end
 
 	windowMaid:Give(win.InputBegan:Connect(function()
 		Window:BringToFront()
@@ -2423,7 +2466,7 @@ local function buildWindow(cfg)
 					tw(kBtn, { BackgroundColor3 = T.SurfaceHover })
 					stroke(kBtn, 1, T.Accent)
 
-					listenConn = windowMaid:Give(UserInputService.InputBegan:Connect(function(inp)
+					listenConn = UserInputService.InputBegan:Connect(function(inp)
 						if not listening then return end
 						if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
 						listening = false
@@ -2433,19 +2476,20 @@ local function buildWindow(cfg)
 						else
 							setKey(inp.KeyCode)
 						end
-					end))
+					end)
 				end)
 
 				kBtn.MouseEnter:Connect(function()
 					if not listening then tw(kBtn, { BackgroundColor3 = T.BorderHi }) end
 				end)
 				kBtn.MouseLeave:Connect(function()
-					if not listening then tw(kBtn, { BackgroundColor3 = T.SurfaceHover }) end
+					if not listening then tw(kBtn, { BackgroundColor3 = T.SurfaceHi }) end
 				end)
 
 				local ctrl = { _row = row, _name = kName }
 				function ctrl:Get() return currentKey end
 				function ctrl:Set(k) setKey(k) end
+				function ctrl:Clear() setKey(Enum.KeyCode.Unknown) end
 				function ctrl:Changed(callback) return changed:Connect(callback) end
 				function ctrl:SetDisabled(nextDisabled)
 					disabled = nextDisabled == true

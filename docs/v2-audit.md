@@ -35,8 +35,8 @@ These were the known gaps at the v2 baseline. See CHANGELOG.md for v3 fix status
 
 - Keyboard and gamepad navigation throughout.
 - Full page reflow (v3 adds sidebar collapse at Compact breakpoint; multi-column content reflow is future work).
-- Persistence beyond the in-memory `MemoryAdapter`.
-- Keybind redesign (current implementation is functional but not redesigned).
+- ~~Persistence beyond the in-memory `MemoryAdapter`.~~ `PersistenceManager.FileAdapter(prefix)` added; uses executor `writefile`/`readfile` + `HttpService:JSONEncode/Decode`. `Window:SaveSettings()` and `Window:LoadSettings(values)` collect/restore all Id-tagged control values.
+- ~~Keybind redesign (current implementation is functional but not redesigned).~~ Keybind fixed: listen connections no longer accumulate in the window maid; MouseLeave hover state corrected (`T.SurfaceHi` not `T.SurfaceHover`); `ctrl:Clear()` added to reset to `Unknown`.
 
 ## Supported v3 platform baseline
 
