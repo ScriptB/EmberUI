@@ -321,6 +321,117 @@ test("FileAdapter: no readfile/writefile -> graceful no-op", function()
     readfile = saved_readfile; writefile = saved_writefile
 end)
 
+print("\n-- Keyboard navigation --")
+test("kbGetFocusable returns only _focusable controls", function()
+    local allElements = {
+        { _focusable = true,  _row = { Visible = true },  _activate = function() end },
+        { _focusable = false, _row = { Visible = true } },
+        { _focusable = true,  _row = { Visible = false }, _activate = function() end },
+        { _focusable = true,  _row = { Visible = true },  _activate = function() end },
+    }
+    local function kbGetFocusable()
+        local list = {}
+        for _, ctrl in ipairs(allElements) do
+            if ctrl._focusable and ctrl._row and ctrl._row.Visible ~= false then
+                list[#list+1] = ctrl
+            end
+        end
+        return list
+    end
+    local list = kbGetFocusable()
+    eq(#list, 2)
+    ok_(list[1] == allElements[1])
+    ok_(list[2] == allElements[4])
+end)
+test("kbCycleFocus wraps forward and backward", function()
+    local n = 4
+    local function cycle(idx, delta)
+        return ((idx - 1 + delta) % n) + 1
+    end
+    eq(cycle(0, 1), 1)
+    eq(cycle(1, 1), 2)
+    eq(cycle(4, 1), 1)
+    eq(cycle(1, -1), 4)
+    eq(cycle(2, -1), 1)
+end)
+test("kbActivateFocused calls _activate on focused control", function()
+    local fired = false
+    local allElements = {
+        { _focusable = true, _row = { Visible = true }, _activate = function(self) fired = true end },
+    }
+    local function kbGetFocusable()
+        local list = {}
+        for _, ctrl in ipairs(allElements) do
+            if ctrl._focusable and ctrl._row and ctrl._row.Visible ~= false then list[#list+1] = ctrl end
+        end
+        return list
+    end
+    local kbFocusIndex = 1
+    local function kbActivateFocused()
+        local list = kbGetFocusable()
+        if kbFocusIndex < 1 or kbFocusIndex > #list then return end
+        list[kbFocusIndex]:_activate()
+    end
+    kbActivateFocused()
+    ok_(fired)
+end)
+test("kbActivateFocused is safe with index 0 (no focus)", function()
+    local allElements = {
+        { _focusable = true, _row = { Visible = true }, _activate = function() error("should not fire") end },
+    }
+    local function kbGetFocusable()
+        local list = {}
+        for _, ctrl in ipairs(allElements) do
+            if ctrl._focusable and ctrl._row and ctrl._row.Visible ~= false then list[#list+1] = ctrl end
+        end
+        return list
+    end
+    local kbFocusIndex = 0
+    local function kbActivateFocused()
+        local list = kbGetFocusable()
+        if kbFocusIndex < 1 or kbFocusIndex > #list then return end
+        list[kbFocusIndex]:_activate()
+    end
+    kbActivateFocused()
+end)
+test("Toggle _activate toggles value", function()
+    local value = false
+    local disabled = false
+    local function applyToggle(v) value = v end
+    local function activate() if not disabled then applyToggle(not value) end end
+    activate(); eq(value, true)
+    activate(); eq(value, false)
+end)
+test("Toggle _activate skipped when disabled", function()
+    local value = false
+    local disabled = true
+    local function applyToggle(v) value = v end
+    local function activate() if not disabled then applyToggle(not value) end end
+    activate(); eq(value, false)
+end)
+test("Button _activate calls Press()", function()
+    local pressed = false
+    local ctrl = { Press = function(self) pressed = true end }
+    function ctrl:_activate() self:Press() end
+    ctrl:_activate()
+    ok_(pressed)
+end)
+test("Keybind startListening guarded by disabled flag", function()
+    local listening = false
+    local disabled = true
+    local function startListening()
+        if disabled or listening then return end
+        listening = true
+    end
+    startListening()
+    eq(listening, false)
+    disabled = false
+    startListening()
+    eq(listening, true)
+    startListening()
+    eq(listening, true)
+end)
+
 print("\n-- Keybind Clear logic --")
 test("Clear resets to Unknown KeyCode", function()
     local currentKey = Enum.KeyCode.F

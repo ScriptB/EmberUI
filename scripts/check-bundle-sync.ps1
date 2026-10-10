@@ -64,6 +64,14 @@ Check-Signature "SaveSettings function"  'function Window:SaveSettings()'
 Check-Signature "LoadSettings function"  'function Window:LoadSettings(values)'
 Check-Signature "Keybind MouseLeave SurfaceHi" 'if not listening then tw(kBtn, { BackgroundColor3 = T.SurfaceHi }) end'
 Check-Signature "Keybind ctrl:Clear"     'function ctrl:Clear() setKey(Enum.KeyCode.Unknown) end'
+Check-Signature "Keybind startListening" 'local function startListening()'
+Check-Signature "Keybind _focusable"     'ctrl._focusable = true'
+Check-Signature "Toggle _activate"       'function ctrl:_activate() if not disabled then applyToggle(not value) end end'
+Check-Signature "Button _activate"       'function ctrl:_activate() self:Press() end'
+Check-Signature "kbCycleFocus function"  'local function kbCycleFocus(delta)'
+Check-Signature "kbActivateFocused"      'local function kbActivateFocused()'
+Check-Signature "Tab key nav"            'inp.KeyCode == Enum.KeyCode.Tab then'
+Check-Signature "Window:ClearFocus"      'function Window:ClearFocus() kbClearFocus() end'
 
 if ($failures -gt 0) {
     Write-Error "$failures sync check(s) failed. Edit EmberUI.lua to match the source files in src/."

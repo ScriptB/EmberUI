@@ -1317,8 +1317,53 @@ local function buildWindow(cfg)
 		end
 	end
 
+	local kbFocusStroke = nil
+	local kbFocusIndex  = 0
+	local function kbClearFocus()
+		if kbFocusStroke then kbFocusStroke:Destroy(); kbFocusStroke = nil end
+		kbFocusIndex = 0
+	end
+	local function kbGetFocusable()
+		local list = {}
+		for _, ctrl in ipairs(Window._allElements) do
+			if ctrl._focusable and ctrl._row and ctrl._row.Visible ~= false then
+				list[#list+1] = ctrl
+			end
+		end
+		return list
+	end
+	local function kbCycleFocus(delta)
+		local list = kbGetFocusable()
+		if #list == 0 then return end
+		kbFocusIndex = ((kbFocusIndex - 1 + delta) % #list) + 1
+		if kbFocusStroke then kbFocusStroke:Destroy() end
+		local s = Instance.new("UIStroke")
+		s.Color     = T.Accent
+		s.Thickness = 2
+		s.Parent    = list[kbFocusIndex]._row
+		kbFocusStroke = s
+	end
+	local function kbActivateFocused()
+		local list = kbGetFocusable()
+		if kbFocusIndex < 1 or kbFocusIndex > #list then return end
+		list[kbFocusIndex]:_activate()
+	end
+	windowMaid:Give(UserInputService.InputBegan:Connect(function(inp, processed)
+		if not win.Visible then return end
+		if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+		if inp.KeyCode == Enum.KeyCode.Tab then
+			local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+			kbCycleFocus(shift and -1 or 1)
+		elseif not processed and (inp.KeyCode == Enum.KeyCode.Return or inp.KeyCode == Enum.KeyCode.Space) then
+			kbActivateFocused()
+		end
+	end))
+	windowMaid:Give(function() kbClearFocus() end)
+	function Window:ClearFocus() kbClearFocus() end
+
 	windowMaid:Give(win.InputBegan:Connect(function()
 		Window:BringToFront()
+		kbClearFocus()
 	end))
 
 	function Window:SideButton(name2, callback)
@@ -1740,6 +1785,8 @@ local function buildWindow(cfg)
 					row:Destroy()
 				end
 				function ctrl:SetVisible(v) row.Visible = v end
+				ctrl._focusable = true
+				function ctrl:_activate() if not disabled then applyToggle(not value) end end
 
 					Window:_registerControl(ctrl, c2, "Toggle")
 				table.insert(Section._elements, ctrl)
@@ -2283,6 +2330,8 @@ local function buildWindow(cfg)
 				end
 				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(v) row.Visible = v end
+				ctrl._focusable = true
+				function ctrl:_activate() self:Press() end
 
 					Window:_registerControl(ctrl, c2, "Button")
 				table.insert(Section._elements, ctrl)
@@ -2452,20 +2501,13 @@ local function buildWindow(cfg)
 				kBtn.Active = not disabled
 				if disabled then kBtn.BackgroundTransparency = 0.45 end
 
-				kBtn.Activated:Connect(function()
-					if disabled then return end
-					if listening then
-						listening = false
-						if listenConn then listenConn:Disconnect(); listenConn = nil end
-						setKey(currentKey, false)
-						return
-					end
+				local function startListening()
+					if disabled or listening then return end
 					listening       = true
 					kLbl.Text       = "..."
 					kLbl.TextColor3 = T.TextSub
 					tw(kBtn, { BackgroundColor3 = T.SurfaceHover })
 					stroke(kBtn, 1, T.Accent)
-
 					listenConn = UserInputService.InputBegan:Connect(function(inp)
 						if not listening then return end
 						if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
@@ -2477,6 +2519,17 @@ local function buildWindow(cfg)
 							setKey(inp.KeyCode)
 						end
 					end)
+				end
+
+				kBtn.Activated:Connect(function()
+					if disabled then return end
+					if listening then
+						listening = false
+						if listenConn then listenConn:Disconnect(); listenConn = nil end
+						setKey(currentKey, false)
+						return
+					end
+					startListening()
 				end)
 
 				kBtn.MouseEnter:Connect(function()
@@ -2508,6 +2561,8 @@ local function buildWindow(cfg)
 					row:Destroy()
 				end
 				function ctrl:SetVisible(v) row.Visible = v end
+				ctrl._focusable = true
+				function ctrl:_activate() startListening() end
 
 					Window:_registerControl(ctrl, c2, "Keybind")
 				table.insert(Section._elements, ctrl)
