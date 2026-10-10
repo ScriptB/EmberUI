@@ -55,9 +55,9 @@ local function tw(obj, props, info)
 	TweenService:Create(obj, info or TI_FAST, props):Play()
 end
 
-local function corner(p, _r)
+local function corner(p, r)
 	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 0)
+	c.CornerRadius = UDim.new(0, r or 0)
 	c.Parent = p
 	return c
 end
@@ -76,9 +76,10 @@ end
 
 local function textStroke(p)
 	local s = Instance.new("UIStroke")
-	s.Thickness = 1.5
-	s.Color = Color3.fromRGB(0, 0, 0)
-	s.Parent = p
+	s.Thickness    = 1.0
+	s.Color        = Color3.fromRGB(0, 0, 0)
+	s.Transparency = 0.25
+	s.Parent       = p
 	return s
 end
 
@@ -96,22 +97,11 @@ local function redGrad(p)
 	p.BackgroundColor3 = T.Accent
 	local existing = p:FindFirstChild("_rg")
 	if existing then existing:Destroy() end
-	local ov = Instance.new("Frame")
-	ov.Name                   = "_rg"
-	ov.Size                   = UDim2.new(1, 0, 1, 0)
-	ov.BackgroundColor3       = Color3.new(1, 1, 1)
-	ov.BackgroundTransparency = 0
-	ov.ZIndex                 = p.ZIndex + 1
-	ov.Parent                 = p
 	local g = Instance.new("UIGradient")
-	g.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0, 0, 0))
-	g.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0,   0.60),
-		NumberSequenceKeypoint.new(0.5, 1),
-		NumberSequenceKeypoint.new(1,   0.65),
-	})
+	g.Name     = "_rg"
+	g.Color    = ColorSequence.new(T.AccentBright, T.AccentDark)
 	g.Rotation = 90
-	g.Parent   = ov
+	g.Parent   = p
 end
 
 local function pad(p, l, r, t, b)
@@ -216,6 +206,12 @@ local function makeDraggable(handle, target, maid, onMove)
 end
 
 local function getRoot()
+	if type(gethui) == "function" then
+		local ok, h = pcall(gethui)
+		if ok and h then return h end
+	end
+	local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+	if ok and cg then return cg end
 	return LocalPlayer:WaitForChild("PlayerGui")
 end
 
@@ -323,7 +319,6 @@ local function spawnNotif(cfg, ownerMaid)
 	prog.BorderSizePixel  = 0
 	prog.ZIndex           = 52
 	prog.Parent           = n
-	TweenService:Create(n, TweenInfo.new(0, Enum.EasingStyle.Linear), {}):Play()
 	tw(prog, { Size = UDim2.new(0, 0, 0, 2) },
 		TweenInfo.new(duration, Enum.EasingStyle.Linear))
 
@@ -381,6 +376,15 @@ local function buildWindow(cfg)
 	windowMaid:Give(gui)
 	themeManager:Register(gui)
 
+	local popupGui = Instance.new("ScreenGui")
+	popupGui.Name           = "EmberUI_Pop_" .. cfg.Title:gsub("%s", "")
+	popupGui.ResetOnSpawn   = false
+	popupGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	popupGui.IgnoreGuiInset = true
+	popupGui.DisplayOrder   = 100
+	popupGui.Parent         = getRoot()
+	windowMaid:Give(popupGui)
+
 	local win = Instance.new("Frame")
 	win.Name                  = "Window"
 	win.AnchorPoint           = Vector2.new(0.5, 0.5)
@@ -435,8 +439,8 @@ local function buildWindow(cfg)
 		Position         = UDim2.new(1, -64, 0.5, 0),
 		AnchorPoint      = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
-		Text             = "-",
-		TextSize         = 16,
+		Text             = string.char(0xe2, 0x80, 0x93),
+		TextSize         = 18,
 		Font             = Enum.Font.GothamBlack,
 		TextColor3       = T.Text,
 		ZIndex           = 8,
@@ -449,8 +453,8 @@ local function buildWindow(cfg)
 		Position         = UDim2.new(1, -32, 0.5, 0),
 		AnchorPoint      = Vector2.new(0, 0.5),
 		BackgroundTransparency = 1,
-		Text             = "X",
-		TextSize         = 14,
+		Text             = string.char(0xc3, 0x97),
+		TextSize         = 16,
 		Font             = Enum.Font.GothamBlack,
 		TextColor3       = T.Text,
 		ZIndex           = 8,
@@ -459,7 +463,10 @@ local function buildWindow(cfg)
 	closeBtn.MouseLeave:Connect(function() tw(closeBtn, { TextColor3 = T.Text }) end)
 	closeBtn.Activated:Connect(destroyWindow)
 
-	makeDraggable(topBar, win, windowMaid, clampToViewport)
+	makeDraggable(topBar, win, windowMaid, function()
+		clampToViewport()
+		overlayManager:CloseTop()
+	end)
 
 	local minimized = false
 	local restoredSize = win.Size
@@ -476,7 +483,7 @@ local function buildWindow(cfg)
 				and UDim2.new(restoredSize.X.Scale, restoredSize.X.Offset, 0, TOPBAR_H + 2)
 				or restoredSize
 		}, TI_MED)
-		minimizeBtn.Text = minimized and "+" or "-"
+		minimizeBtn.Text = minimized and "+" or string.char(0xe2, 0x80, 0x93)
 	end
 	minimizeBtn.Activated:Connect(doMinimize)
 
@@ -613,7 +620,7 @@ local function buildWindow(cfg)
 	end
 	function Window:Close() self:Destroy() end
 	function Window:IsDestroyed() return destroyed end
-	function Window:Minimize() doMinimize() end
+	function Window:Minimize() if not minimized then doMinimize() end end
 	function Window:Restore() if minimized then doMinimize() end end
 	function Window:Toggle()
 		win.Visible = not win.Visible
@@ -664,8 +671,14 @@ local function buildWindow(cfg)
 		stroke(btn, 2, T.Border)
 		local lbl = mkLabel({ Size = UDim2.new(1, 0, 1, 0), Text = name2, TextSize = 14, Font = Enum.Font.GothamBlack, ZIndex = 5, TextColor3 = T.Text }, btn)
 		textStroke(lbl)
-		btn.MouseEnter:Connect(function() redGrad(btn) end)
-		btn.MouseLeave:Connect(function() redGrad(btn) end)
+		local sideHov = Instance.new("Frame")
+		sideHov.Size                   = UDim2.new(1, 0, 1, 0)
+		sideHov.BackgroundColor3       = Color3.new(1, 1, 1)
+		sideHov.BackgroundTransparency = 1
+		sideHov.ZIndex                 = 6
+		sideHov.Parent                 = btn
+		btn.MouseEnter:Connect(function() tw(sideHov, { BackgroundTransparency = 0.85 }) end)
+		btn.MouseLeave:Connect(function() tw(sideHov, { BackgroundTransparency = 1 }) end)
 		btn.Activated:Connect(function() callCallback("SideButton", callback) end)
 		return btn
 	end
@@ -696,6 +709,13 @@ local function buildWindow(cfg)
 		}, tabBtn)
 		textStroke(lbl)
 
+		local tabHov = Instance.new("Frame")
+		tabHov.Size                   = UDim2.new(1, 0, 1, 0)
+		tabHov.BackgroundColor3       = Color3.new(1, 1, 1)
+		tabHov.BackgroundTransparency = 1
+		tabHov.ZIndex                 = 6
+		tabHov.Parent                 = tabBtn
+
 		local page = Instance.new("ScrollingFrame")
 		page.Name                   = name2 .. "_Page"
 		page.Size                   = UDim2.new(1, 0, 1, 0)
@@ -716,18 +736,16 @@ local function buildWindow(cfg)
 			if Window._activeTab then
 				local old = Window._activeTab
 				old._page.Visible = false
-				redGrad(old._btn)
 				stroke(old._btn, 2, T.Border)
 			end
 			page.Visible = true
-			redGrad(tabBtn)
-			stroke(tabBtn, 2, T.Border)
+			stroke(tabBtn, 2, T.Accent)
 			Window._activeTab = Tab
 		end
 
 		tabBtn.Activated:Connect(activate)
-		tabBtn.MouseEnter:Connect(function() redGrad(tabBtn) end)
-		tabBtn.MouseLeave:Connect(function() redGrad(tabBtn) end)
+		tabBtn.MouseEnter:Connect(function() tw(tabHov, { BackgroundTransparency = 0.85 }) end)
+		tabBtn.MouseLeave:Connect(function() tw(tabHov, { BackgroundTransparency = 1 }) end)
 
 		if #Window._tabs == 0 then task.defer(activate) end
 		table.insert(Window._tabs, Tab)
@@ -739,8 +757,8 @@ local function buildWindow(cfg)
 			secWrap.Name                  = sname .. "_Sec"
 			secWrap.Size                  = UDim2.new(1, 0, 0, 0)
 			secWrap.AutomaticSize         = Enum.AutomaticSize.Y
-			secWrap.BackgroundColor3      = Color3.fromRGB(0, 0, 0)
-			secWrap.BackgroundTransparency= 0.70
+			secWrap.BackgroundColor3      = T.Surface
+			secWrap.BackgroundTransparency= 0
 			secWrap.ZIndex                = 4
 			secWrap.Parent                = page
 			corner(secWrap, 3)
@@ -764,17 +782,31 @@ local function buildWindow(cfg)
 				ZIndex           = 6,
 			}, hdr)
 
-			local chevLbl = mkLabel({
-				Position       = UDim2.new(0, 8, 0, 0),
-				Size           = UDim2.new(0, 18, 1, 0),
-				Text           = expanded and "v" or ">",
-				TextSize       = 14,
-				TextColor3     = T.Text,
-				Font           = Enum.Font.GothamBlack,
-				TextXAlignment = Enum.TextXAlignment.Center,
-				ZIndex         = 6,
+			local chevWrap = mkFrame({
+				Position    = UDim2.new(0, 8, 0.5, 0),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Size        = UDim2.new(0, 14, 0, 10),
+				ZIndex      = 6,
+				Rotation    = expanded and 0 or -90,
 			}, hdr)
-			textStroke(chevLbl)
+			local chevA = Instance.new("Frame")
+			chevA.Size             = UDim2.new(0, 8, 0, 2)
+			chevA.AnchorPoint      = Vector2.new(0.5, 0.5)
+			chevA.Position         = UDim2.new(0.5, -3, 0.5, 0)
+			chevA.Rotation         = 45
+			chevA.BackgroundColor3 = T.TextSub
+			chevA.BorderSizePixel  = 0
+			chevA.ZIndex           = 6
+			chevA.Parent           = chevWrap
+			local chevB = Instance.new("Frame")
+			chevB.Size             = UDim2.new(0, 8, 0, 2)
+			chevB.AnchorPoint      = Vector2.new(0.5, 0.5)
+			chevB.Position         = UDim2.new(0.5, 3, 0.5, 0)
+			chevB.Rotation         = -45
+			chevB.BackgroundColor3 = T.TextSub
+			chevB.BorderSizePixel  = 0
+			chevB.ZIndex           = 6
+			chevB.Parent           = chevWrap
 
 			local lbl = mkLabel({
 				Position       = UDim2.new(0, 28, 0, 0),
@@ -803,7 +835,7 @@ local function buildWindow(cfg)
 
 			hdrHit.Activated:Connect(function()
 				contentFrame.Visible = not contentFrame.Visible
-				chevLbl.Text = contentFrame.Visible and "v" or ">"
+				tw(chevWrap, { Rotation = contentFrame.Visible and 0 or -90 }, TI_FAST)
 			end)
 
 			local Section = { _content = contentFrame, _elements = {}, _wrap = secWrap }
@@ -813,8 +845,8 @@ local function buildWindow(cfg)
 				local row = Instance.new("Frame")
 				row.Name                  = rname
 				row.Size                  = UDim2.new(1, 0, 0, h)
-				row.BackgroundColor3      = Color3.fromRGB(0, 0, 0)
-				row.BackgroundTransparency= 0.60
+				row.BackgroundColor3      = T.SurfaceHi
+				row.BackgroundTransparency= 0
 				row.ZIndex                = 5
 				row.Parent                = contentFrame
 				stroke(row, 1, T.Border)
@@ -847,6 +879,7 @@ local function buildWindow(cfg)
 				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(visible) row.Visible = visible end
 				Window:_registerControl(ctrl, c2, "Separator")
+				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
 
@@ -862,6 +895,7 @@ local function buildWindow(cfg)
 				function ctrl:Destroy() Window:_unregisterControl(self); row:Destroy() end
 				function ctrl:SetVisible(visible) row.Visible = visible end
 				Window:_registerControl(ctrl, c2, "Spacer")
+				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
 
@@ -932,6 +966,7 @@ local function buildWindow(cfg)
 				track.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 				track.ZIndex           = 7
 				track.Parent           = row
+				corner(track, 11)
 				stroke(track, 1, T.Border)
 
 				local knob = Instance.new("Frame")
@@ -941,6 +976,7 @@ local function buildWindow(cfg)
 				knob.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
 				knob.ZIndex           = 8
 				knob.Parent           = track
+				corner(knob, 8)
 
 				local hit = mkButton({ Size = UDim2.new(1, 0, 1, 0), ZIndex = 9 }, row)
 
@@ -959,11 +995,11 @@ local function buildWindow(cfg)
 					if v then
 						local e = track:FindFirstChildOfClass("UIGradient")
 						if e then e:Destroy() end
-						track.BackgroundColor3 = Color3.new(1, 1, 1)
+						track.BackgroundColor3 = T.On
 						local g = Instance.new("UIGradient")
-						g.Color = ColorSequence.new(Color3.fromRGB(58, 255, 55), Color3.fromRGB(20, 109, 0))
+						g.Color    = ColorSequence.new(T.On, T.OnDark)
 						g.Rotation = 90
-						g.Parent = track
+						g.Parent   = track
 						tw(knob, { Position = onPos, BackgroundColor3 = Color3.fromRGB(255, 255, 255) }, TI_FAST)
 					else
 						local e = track:FindFirstChildOfClass("UIGradient")
@@ -1099,14 +1135,14 @@ local function buildWindow(cfg)
 				trackBg.BackgroundColor3 = T.SurfaceHover
 				trackBg.ZIndex           = 6
 				trackBg.Parent           = row
-				corner(trackBg, 0)
+				corner(trackBg, 3)
 
 				local trackFill = Instance.new("Frame")
 				trackFill.Size             = UDim2.new(0, 0, 1, 0)
 				trackFill.BackgroundColor3 = Color3.new(1, 1, 1)
 				trackFill.ZIndex           = 7
 				trackFill.Parent           = trackBg
-				corner(trackFill, 0)
+				corner(trackFill, 3)
 				redGrad(trackFill)
 
 				local handle = Instance.new("Frame")
@@ -1116,7 +1152,7 @@ local function buildWindow(cfg)
 				handle.BackgroundColor3  = T.AccentBright
 				handle.ZIndex            = 9
 				handle.Parent            = trackBg
-				corner(handle, 0)
+				corner(handle, 7)
 
 				local value = sDef
 				local dragging = false
@@ -1225,7 +1261,9 @@ local function buildWindow(cfg)
 				Window:_validateControlId(c2, "Dropdown")
 				Validation.warnUnknown(c2, { "Id", "Name", "Options", "Multi", "Default", "Disabled", "Callback" }, "Dropdown")
 				local dName    = c2.Name    or "Dropdown"
-				local dOpts    = c2.Options or {}
+				local rawOpts  = c2.Options or {}
+				local dOpts    = {}
+				for _, v in ipairs(rawOpts) do dOpts[#dOpts + 1] = tostring(v) end
 				local dMulti   = c2.Multi   or false
 				local dDefault = c2.Default
 				local dCb      = c2.Callback
@@ -1270,7 +1308,7 @@ local function buildWindow(cfg)
 				caretA.AnchorPoint     = Vector2.new(0.5, 0.5)
 				caretA.Position        = UDim2.new(0.5, -3, 0.5, 0)
 				caretA.Rotation        = 45
-				caretA.BackgroundColor3= Color3.fromRGB(58, 255, 55)
+				caretA.BackgroundColor3= T.Accent
 				caretA.BorderSizePixel = 0
 				caretA.ZIndex          = 7
 				caretA.Parent          = caretWrap
@@ -1279,7 +1317,7 @@ local function buildWindow(cfg)
 				caretB.AnchorPoint     = Vector2.new(0.5, 0.5)
 				caretB.Position        = UDim2.new(0.5, 3, 0.5, 0)
 				caretB.Rotation        = -45
-				caretB.BackgroundColor3= Color3.fromRGB(58, 255, 55)
+				caretB.BackgroundColor3= T.Accent
 				caretB.BorderSizePixel = 0
 				caretB.ZIndex          = 7
 				caretB.Parent          = caretWrap
@@ -1340,13 +1378,13 @@ local function buildWindow(cfg)
 																				menuContainer.Name = "DDMenuContainer"
 																				menuContainer.Size = UDim2.new(0, DW, 0, mH)
 																				menuContainer.Position = UDim2.new(
-																								0, ddBtn.AbsolutePosition.X - win.AbsolutePosition.X,
-																								0, ddBtn.AbsolutePosition.Y - win.AbsolutePosition.Y + ddBtn.AbsoluteSize.Y + 2
+																								0, ddBtn.AbsolutePosition.X,
+																								0, ddBtn.AbsolutePosition.Y + ddBtn.AbsoluteSize.Y + 2
 																				)
 																				menuContainer.BackgroundColor3 = T.SurfaceHi
 																				menuContainer.BackgroundTransparency = 0
 																				menuContainer.ZIndex = 30
-																				menuContainer.Parent = win
+																				menuContainer.Parent = popupGui
 																				corner(menuContainer, 7)
 																				stroke(menuContainer, 1, T.Border)
 																				menuFrame = menuContainer
@@ -1416,7 +1454,16 @@ local function buildWindow(cfg)
 																																row = mkButton({ Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.SurfaceHover, BackgroundTransparency = 0.2, ZIndex = 31 }, mf)
 																																stroke(row, 1, T.Border)
 																																local lbl = mkLabel({ Text = "", Position = UDim2.new(0, 28, 0, 0), Size = UDim2.new(1, -34, 1, 0), TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 32 }, row)
-																																local tick = mkLabel({ Text = "", Position = UDim2.new(0, 8, 0, 0), Size = UDim2.new(0, 18, 1, 0), TextSize = 12, TextColor3 = T.On, Font = Enum.Font.GothamBlack, ZIndex = 32 }, row)
+																																local tick = Instance.new("Frame")
+																																tick.Size             = UDim2.new(0, 8, 0, 8)
+																																tick.AnchorPoint      = Vector2.new(0.5, 0.5)
+																																tick.Position         = UDim2.new(0, 14, 0.5, 0)
+																																tick.BackgroundColor3 = T.On
+																																tick.BorderSizePixel  = 0
+																																tick.ZIndex           = 32
+																																tick.Visible          = false
+																																tick.Parent           = row
+																																corner(tick, 2)
 
 																																row.MouseEnter:Connect(function() tw(row, { BackgroundTransparency = 0 }) end)
 																																row.MouseLeave:Connect(function() tw(row, { BackgroundTransparency = selected[row._opt] and 0 or 0.2 }) end)
@@ -1444,7 +1491,7 @@ local function buildWindow(cfg)
 																												row.Visible = true
 																												row._opt = opt
 																												row._lbl.Text = opt
-																			row._tick.Text = selected[opt] and "*" or ""
+																			row._tick.Visible = selected[opt] == true
 																												row.BackgroundTransparency = selected[opt] and 0 or 0.2
 																												row.Position = UDim2.new(0, 0, 0, virtualList:GetOffset(i))
 																								end
@@ -1492,10 +1539,12 @@ local function buildWindow(cfg)
 					if disabled then closeMenu() end
 				end
 				function ctrl:SetOptions(opts)
-					dOpts = opts
+					closeMenu()
+					dOpts = {}
+					for _, o in ipairs(opts) do dOpts[#dOpts + 1] = tostring(o) end
 					for k in pairs(selected) do
 						local found = false
-						for _, o in ipairs(opts) do if o == k then found = true; break end end
+						for _, o in ipairs(dOpts) do if o == k then found = true; break end end
 						if not found then selected[k] = nil end
 					end
 					refreshLabel()
@@ -1618,14 +1667,12 @@ local function buildWindow(cfg)
 				tb.Parent            = wrap
 
 				tb.Focused:Connect(function() stroke(wrap, 1, T.Accent) end)
-				tb.FocusLost:Connect(function(enter)
+				tb.FocusLost:Connect(function()
 					stroke(wrap, 1, T.Border)
-					if enter then
-						local v = tb.Text
-						if iNum then v = tostring(tonumber(v) or 0); tb.Text = v end
-						callCallback("Input", iCb, v)
-						changed:Fire(v)
-					end
+					local v = tb.Text
+					if iNum then v = tostring(tonumber(v) or 0); tb.Text = v end
+					callCallback("Input", iCb, v)
+					changed:Fire(v)
 				end)
 				tb.TextEditable = not disabled
 				if disabled then wrap.BackgroundTransparency = 0.45 end
@@ -1653,12 +1700,16 @@ local function buildWindow(cfg)
 			function Section:Label(c2)
 				c2 = c2 or {}
 				Window:_validateControlId(c2, "Label")
+				Validation.warnUnknown(c2, { "Id", "Text", "Visible" }, "Label")
 				local text = c2.Text or ""
 
-				local row = makeRow("_lbl", 32)
+				local row = makeRow("_lbl", 0)
+				row.AutomaticSize = Enum.AutomaticSize.Y
 				local lbl = mkLabel({
 					Position       = UDim2.new(0, 14, 0, 0),
-					Size           = UDim2.new(1, -28, 1, 0),
+					Size           = UDim2.new(1, -28, 0, 0),
+					AutomaticSize  = Enum.AutomaticSize.Y,
+					TextWrapped    = true,
 					Text           = text,
 					TextSize       = 12,
 					TextColor3     = T.TextSub,
@@ -1674,6 +1725,7 @@ local function buildWindow(cfg)
 				function ctrl:SetVisible(v) row.Visible = v end
 
 					Window:_registerControl(ctrl, c2, "Label")
+				table.insert(Section._elements, ctrl)
 				return ctrl
 			end
 
@@ -1796,8 +1848,8 @@ local function buildWindow(cfg)
 				Validation.warnUnknown(c2, { "Id", "Name", "Items", "Columns", "ImageSize", "Callback" }, "ImageList")
 				local iName   = c2.Name      or "Images"
 				local items   = c2.Items     or {}
-				local cols    = c2.Columns   or 3
-				local imgPx   = c2.ImageSize or 58
+				local cols    = math.max(1, math.floor(c2.Columns or 3))
+				local imgPx   = math.max(8, math.floor(c2.ImageSize or 58))
 				local callback = c2.Callback
 
 				local labelH  = 18
@@ -1905,7 +1957,7 @@ local function buildWindow(cfg)
 						break
 					end
 				end
-				sec._wrap.Visible = any
+				sec._wrap.Visible = any or #sec._elements == 0
 				if any then sec._content.Visible = true end
 			end
 		end
