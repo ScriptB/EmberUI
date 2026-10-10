@@ -144,6 +144,7 @@ end
 local function mkLabel(props, parent)
 	local l = Instance.new("TextLabel")
 	l.BackgroundTransparency = 1
+	l.Text       = ""
 	l.Font       = Enum.Font.Gotham
 	l.TextColor3 = T.Text
 	l.TextSize   = 14
@@ -1356,6 +1357,7 @@ local function buildWindow(cfg)
 																				fixCorners(searchWrap, "bottom", T.Surface, 7)
 																				
 																				local searchBox = Instance.new("TextBox")
+																				searchBox.Text = ""
 																				searchBox.Size = UDim2.new(1, -16, 1, -8)
 																				searchBox.Position = UDim2.new(0, 8, 0, 4)
 																				searchBox.BackgroundColor3 = T.SurfaceHover
