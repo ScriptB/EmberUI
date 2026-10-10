@@ -321,6 +321,91 @@ test("FileAdapter: no readfile/writefile -> graceful no-op", function()
     readfile = saved_readfile; writefile = saved_writefile
 end)
 
+print("\n-- Gamepad navigation --")
+test("isGamepad recognises Gamepad1-4, rejects Keyboard/Mouse", function()
+    local function isGamepad(ut)
+        return ut == "Gamepad1" or ut == "Gamepad2" or ut == "Gamepad3" or ut == "Gamepad4"
+    end
+    ok_(isGamepad("Gamepad1")); ok_(isGamepad("Gamepad2"))
+    ok_(isGamepad("Gamepad3")); ok_(isGamepad("Gamepad4"))
+    notok(isGamepad("Keyboard")); notok(isGamepad("Mouse"))
+end)
+test("DPadDown cycles focus forward", function()
+    local focusIndex = 0; local n = 3
+    local function cycle(delta) focusIndex = ((focusIndex - 1 + delta) % n) + 1 end
+    cycle(1); eq(focusIndex, 1)
+    cycle(1); eq(focusIndex, 2)
+    cycle(1); eq(focusIndex, 3)
+    cycle(1); eq(focusIndex, 1)
+end)
+test("DPadUp cycles focus backward", function()
+    local focusIndex = 1; local n = 3
+    local function cycle(delta) focusIndex = ((focusIndex - 1 + delta) % n) + 1 end
+    cycle(-1); eq(focusIndex, 3)
+    cycle(-1); eq(focusIndex, 2)
+end)
+test("ButtonB clears focus", function()
+    local focusIndex = 2
+    local function clearFocus() focusIndex = 0 end
+    clearFocus(); eq(focusIndex, 0)
+end)
+
+print("\n-- Multi-column reflow --")
+test("isWide: Wide and Expanded are wide; Compact and Standard are not", function()
+    local function isWide(bp) return bp == "Wide" or bp == "Expanded" end
+    ok_(isWide("Wide")); ok_(isWide("Expanded"))
+    notok(isWide("Compact")); notok(isWide("Standard"))
+end)
+test("sections alternate left/right at index odd/even", function()
+    local function col(i, left, right) return (i % 2 == 1) and left or right end
+    eq(col(1, "L", "R"), "L")
+    eq(col(2, "L", "R"), "R")
+    eq(col(3, "L", "R"), "L")
+    eq(col(4, "L", "R"), "R")
+end)
+test("reflowColumns: wide puts sections into columns, narrow puts all in page", function()
+    local page = "page"
+    local colLeft, colRight = "colLeft", "colRight"
+    local sections = { {}, {}, {} }
+    local parents = {}
+    local function reflowColumns(bp)
+        local wide = bp == "Wide" or bp == "Expanded"
+        for i, sec in ipairs(sections) do
+            parents[i] = wide and ((i % 2 == 1) and colLeft or colRight) or page
+        end
+    end
+    reflowColumns("Wide")
+    eq(parents[1], "colLeft"); eq(parents[2], "colRight"); eq(parents[3], "colLeft")
+    reflowColumns("Standard")
+    eq(parents[1], "page"); eq(parents[2], "page"); eq(parents[3], "page")
+end)
+test("new section added during wide mode goes to correct column", function()
+    local page, colLeft, colRight = "page", "colL", "colR"
+    local sections = {}
+    local function addSection(bp)
+        local sec = {}
+        table.insert(sections, sec)
+        local idx = #sections
+        local wide = bp == "Wide" or bp == "Expanded"
+        sec.parent = wide and ((idx % 2 == 1) and colLeft or colRight) or page
+        return sec
+    end
+    local s1 = addSection("Wide")
+    local s2 = addSection("Wide")
+    local s3 = addSection("Standard")
+    eq(s1.parent, "colL"); eq(s2.parent, "colR"); eq(s3.parent, "page")
+end)
+test("activate hides previous tab wide page", function()
+    local hidden = {}
+    local oldTab = { _page = { Visible = true }, _pageWide = { Visible = true } }
+    local function activate()
+        oldTab._page.Visible     = false
+        oldTab._pageWide.Visible = false
+    end
+    activate()
+    eq(oldTab._page.Visible, false); eq(oldTab._pageWide.Visible, false)
+end)
+
 print("\n-- Keyboard navigation --")
 test("kbGetFocusable returns only _focusable controls", function()
     local allElements = {

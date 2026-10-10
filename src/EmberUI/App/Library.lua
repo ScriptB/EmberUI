@@ -700,6 +700,7 @@ local function buildWindow(cfg)
 		leftSide.Size = UDim2.new(0, narrow and COMPACT_SIDEBAR_W or SIDEBAR_W, 1, -TOPBAR_H)
 		for _, tab in ipairs(Window._tabs) do
 			if tab._lbl then tab._lbl.Visible = not narrow end
+			if tab._reflowColumns then tab._reflowColumns(bp) end
 		end
 	end
 	local breakpointChanged = Signal.new()
@@ -765,14 +766,29 @@ local function buildWindow(cfg)
 		if kbFocusIndex < 1 or kbFocusIndex > #list then return end
 		list[kbFocusIndex]:_activate()
 	end
+	local function isGamepad(ut)
+		return ut == Enum.UserInputType.Gamepad1 or ut == Enum.UserInputType.Gamepad2
+			or ut == Enum.UserInputType.Gamepad3 or ut == Enum.UserInputType.Gamepad4
+	end
 	windowMaid:Give(UserInputService.InputBegan:Connect(function(inp, processed)
 		if not win.Visible then return end
-		if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
-		if inp.KeyCode == Enum.KeyCode.Tab then
-			local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-			kbCycleFocus(shift and -1 or 1)
-		elseif not processed and (inp.KeyCode == Enum.KeyCode.Return or inp.KeyCode == Enum.KeyCode.Space) then
-			kbActivateFocused()
+		if inp.UserInputType == Enum.UserInputType.Keyboard then
+			if inp.KeyCode == Enum.KeyCode.Tab then
+				local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+				kbCycleFocus(shift and -1 or 1)
+			elseif not processed and (inp.KeyCode == Enum.KeyCode.Return or inp.KeyCode == Enum.KeyCode.Space) then
+				kbActivateFocused()
+			end
+		elseif isGamepad(inp.UserInputType) then
+			if inp.KeyCode == Enum.KeyCode.DPadDown then
+				kbCycleFocus(1)
+			elseif inp.KeyCode == Enum.KeyCode.DPadUp then
+				kbCycleFocus(-1)
+			elseif inp.KeyCode == Enum.KeyCode.ButtonA then
+				kbActivateFocused()
+			elseif inp.KeyCode == Enum.KeyCode.ButtonB then
+				kbClearFocus()
+			end
 		end
 	end))
 	windowMaid:Give(function() kbClearFocus() end)
@@ -857,14 +873,74 @@ local function buildWindow(cfg)
 		list(page, Enum.FillDirection.Vertical, 4)
 		Tab._page = page
 
+		local pageWide = mkFrame({ Name = name2 .. "_Wide", Size = UDim2.new(1, 0, 1, 0), ZIndex = 3 }, pages)
+		pageWide.Visible = false
+
+		local colLeft = Instance.new("ScrollingFrame")
+		colLeft.Name = "ColLeft"
+		colLeft.Size = UDim2.new(0.5, -2, 1, 0)
+		colLeft.BackgroundTransparency = 1
+		colLeft.ScrollBarThickness = 4
+		colLeft.ScrollBarImageColor3 = T.Accent
+		colLeft.CanvasSize = UDim2.new(0, 0, 0, 0)
+		colLeft.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		colLeft.ZIndex = 3
+		colLeft.Parent = pageWide
+		pad(colLeft, 6, 8, 6, 6)
+		list(colLeft, Enum.FillDirection.Vertical, 4)
+
+		local colRight = Instance.new("ScrollingFrame")
+		colRight.Name = "ColRight"
+		colRight.Size = UDim2.new(0.5, -2, 1, 0)
+		colRight.Position = UDim2.new(0.5, 2, 0, 0)
+		colRight.BackgroundTransparency = 1
+		colRight.ScrollBarThickness = 4
+		colRight.ScrollBarImageColor3 = T.Accent
+		colRight.CanvasSize = UDim2.new(0, 0, 0, 0)
+		colRight.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		colRight.ZIndex = 3
+		colRight.Parent = pageWide
+		pad(colRight, 6, 8, 6, 6)
+		list(colRight, Enum.FillDirection.Vertical, 4)
+
+		Tab._pageWide = pageWide
+		Tab._colLeft  = colLeft
+		Tab._colRight = colRight
+		Tab._sections = {}
+
+		local function isWide(bp) return bp == "Wide" or bp == "Expanded" end
+
+		local function showActivePage()
+			if isWide(currentBreakpoint) then
+				page.Visible     = false
+				pageWide.Visible = true
+			else
+				pageWide.Visible = false
+				page.Visible     = true
+			end
+		end
+
+		function Tab._reflowColumns(_, bp)
+			local wide = isWide(bp)
+			for i, sec in ipairs(Tab._sections) do
+				sec.Parent = wide and ((i % 2 == 1) and colLeft or colRight) or page
+				sec.Size   = UDim2.new(1, 0, 0, 0)
+			end
+			if Window._activeTab == Tab then
+				page.Visible     = not wide
+				pageWide.Visible = wide
+			end
+		end
+
 		local function activate()
 			if Window._activeTab == Tab then return end
 			if Window._activeTab then
 				local old = Window._activeTab
-				old._page.Visible = false
+				old._page.Visible     = false
+				old._pageWide.Visible = false
 				stroke(old._btn, 2, T.Border)
 			end
-			page.Visible = true
+			showActivePage()
 			stroke(tabBtn, 2, T.Accent)
 			Window._activeTab = Tab
 		end
@@ -886,7 +962,10 @@ local function buildWindow(cfg)
 			secWrap.BackgroundColor3      = T.Surface
 			secWrap.BackgroundTransparency= 0
 			secWrap.ZIndex                = 4
-			secWrap.Parent                = page
+			table.insert(Tab._sections, secWrap)
+			local secIdx = #Tab._sections
+			local _wide = isWide(currentBreakpoint)
+			secWrap.Parent = _wide and ((secIdx % 2 == 1) and colLeft or colRight) or page
 			corner(secWrap, 3)
 			stroke(secWrap, 2, T.Border)
 			list(secWrap, Enum.FillDirection.Vertical, 0)

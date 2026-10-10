@@ -72,6 +72,18 @@ Check-Signature "kbCycleFocus function"  'local function kbCycleFocus(delta)'
 Check-Signature "kbActivateFocused"      'local function kbActivateFocused()'
 Check-Signature "Tab key nav"            'inp.KeyCode == Enum.KeyCode.Tab then'
 Check-Signature "Window:ClearFocus"      'function Window:ClearFocus() kbClearFocus() end'
+Check-Signature "Gamepad isGamepad fn"   'local function isGamepad(ut)'
+Check-Signature "Gamepad DPadDown nav"   'inp.KeyCode == Enum.KeyCode.DPadDown then'
+Check-Signature "Gamepad ButtonA"        'inp.KeyCode == Enum.KeyCode.ButtonA then'
+Check-Signature "Gamepad ButtonB clear"  'inp.KeyCode == Enum.KeyCode.ButtonB then'
+Check-Signature "Tab._pageWide"          'Tab._pageWide = pageWide'
+Check-Signature "Tab._sections"          'Tab._sections = {}'
+Check-Signature "_reflowColumns fn"      'function Tab._reflowColumns(_, bp)'
+Check-Signature "colLeft ColLeft"        'colLeft.Name = "ColLeft"'
+Check-Signature "colRight ColRight"      'colRight.Name = "ColRight"'
+Check-Signature "isWide helper"          'local function isWide(bp) return bp == "Wide" or bp == "Expanded" end'
+Check-Signature "reflowSidebar calls reflowColumns" 'if tab._reflowColumns then tab._reflowColumns(bp) end'
+Check-Signature "Section inserts into Tab._sections" 'table.insert(Tab._sections, secWrap)'
 
 if ($failures -gt 0) {
     Write-Error "$failures sync check(s) failed. Edit EmberUI.lua to match the source files in src/."
