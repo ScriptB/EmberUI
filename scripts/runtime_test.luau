@@ -216,7 +216,9 @@ local env = {
 }
 env._G = env
 
-local bundleRaw = fs.readFile("../EmberUI.lua")
+-- This script is documented to run from the repository root:
+--   lune run scripts/runtime_test.luau
+local bundleRaw = fs.readFile("EmberUI.lua")
 local bundleSrc = bundleRaw:sub(1,3) == "\xEF\xBB\xBF" and bundleRaw:sub(4) or bundleRaw
 local fn, loadErr = loadstring(bundleSrc, "@EmberUI")
 check("EmberUI.lua loads (no syntax error)", fn ~= nil, loadErr)

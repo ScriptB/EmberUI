@@ -1916,7 +1916,7 @@ local function buildWindow(cfg)
 			function Section:Label(c2)
 				c2 = c2 or {}
 				local _existing = Window:_validateControlId(c2, "Label"); if _existing then return _existing end
-				Validation.warnUnknown(c2, { "Id", "Text", "Visible" }, "Label")
+				Validation.warnUnknown(c2, { "Id", "Name", "Text", "Visible" }, "Label")
 				local text = c2.Text or ""
 
 				local row = makeRow("_lbl", 0)
