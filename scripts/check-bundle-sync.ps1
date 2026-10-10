@@ -54,6 +54,9 @@ Check-Signature "R2 textStroke 0.5"       's.Transparency = 0.5'
 Check-Signature "R1 reflowSidebar fn"     'local function reflowSidebar(bp)'
 Check-Signature "R1 compact sidebar"      'COMPACT_SIDEBAR_W = 52'
 Check-Signature "R1 tab._lbl stored"      'Tab._lbl = lbl'
+Check-Signature "protect_gui notifGui"    'if type(protect_gui) == "function" then pcall(protect_gui, g) end'
+Check-Signature "protect_gui popupGui"    'if type(protect_gui) == "function" then pcall(protect_gui, popupGui) end'
+Check-Signature "notif _notifs cleanup"   'ownerMaid:Give(function()'
 
 if ($failures -gt 0) {
     Write-Error "$failures sync check(s) failed. Edit EmberUI.lua to match the source files in src/."

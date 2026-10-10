@@ -226,6 +226,7 @@ local function ensureNotifGui()
 	g.ResetOnSpawn   = false
 	g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	g.IgnoreGuiInset = true
+	if type(protect_gui) == "function" then pcall(protect_gui, g) end
 	g.Parent         = getRoot()
 	_notifGui = g
 	return g
@@ -263,7 +264,14 @@ local function spawnNotif(cfg, ownerMaid)
 	n.BackgroundTransparency= 0
 	n.ZIndex                = 50
 	n.Parent                = g
-	if ownerMaid then ownerMaid:Give(n) end
+	if ownerMaid then
+		ownerMaid:Give(n)
+		ownerMaid:Give(function()
+			for i, v in ipairs(_notifs) do
+				if v == n then table.remove(_notifs, i); break end
+			end
+		end)
+	end
 	corner(n, 8)
 	stroke(n, 1, T.Border)
 
@@ -383,6 +391,7 @@ local function buildWindow(cfg)
 	popupGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	popupGui.IgnoreGuiInset = true
 	popupGui.DisplayOrder   = 100
+	if type(protect_gui) == "function" then pcall(protect_gui, popupGui) end
 	popupGui.Parent         = getRoot()
 	windowMaid:Give(popupGui)
 
