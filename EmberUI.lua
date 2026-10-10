@@ -637,7 +637,7 @@ local function textStroke(p)
 	local s = Instance.new("UIStroke")
 	s.Thickness    = 1.0
 	s.Color        = T.Border
-	s.Transparency = 0.25
+	s.Transparency = 0.5
 	s.Parent       = p
 	return s
 end
@@ -850,7 +850,7 @@ local function spawnNotif(cfg, ownerMaid)
 		Position       = UDim2.new(0, 14, 0, 30),
 		Size           = UDim2.new(1, -18, 0, 32),
 		Text           = message,
-		TextSize       = 11,
+		TextSize       = 12,
 		Font           = Enum.Font.Gotham,
 		TextColor3     = T.TextSub,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -863,7 +863,7 @@ local function spawnNotif(cfg, ownerMaid)
 		Position       = UDim2.new(1, -10, 0, 8),
 		Size           = UDim2.new(0, 58, 0, 16),
 		Text           = nType:upper(),
-		TextSize       = 10,
+		TextSize       = 11,
 		Font           = Enum.Font.GothamBlack,
 		TextColor3     = acCol,
 		TextXAlignment = Enum.TextXAlignment.Right,
@@ -932,6 +932,7 @@ local function buildWindow(cfg)
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.IgnoreGuiInset = true
 	gui.Parent         = getRoot()
+	if type(protect_gui) == "function" then pcall(protect_gui, gui) end
 	windowMaid:Give(gui)
 	themeManager:Register(gui)
 
@@ -1031,6 +1032,44 @@ local function buildWindow(cfg)
 		clampToViewport()
 		overlayManager:CloseTop()
 	end)
+
+	local resizeHandle = Instance.new("Frame")
+	resizeHandle.Name              = "ResizeHandle"
+	resizeHandle.AnchorPoint       = Vector2.new(1, 1)
+	resizeHandle.Position          = UDim2.new(1, 0, 1, 0)
+	resizeHandle.Size              = UDim2.new(0, 14, 0, 14)
+	resizeHandle.BackgroundColor3  = T.Border
+	resizeHandle.BackgroundTransparency = 0.5
+	resizeHandle.ZIndex            = 9
+	resizeHandle.Parent            = win
+	corner(resizeHandle, 3)
+	do
+		local rDragging = false
+		local rStartMouse, rStartSize
+		local MIN_W, MIN_H = 300, 200
+		windowMaid:Give(resizeHandle.InputBegan:Connect(function(inp)
+			if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+				rDragging = true
+				rStartMouse = UserInputService:GetMouseLocation()
+				rStartSize  = win.AbsoluteSize
+			end
+		end))
+		windowMaid:Give(UserInputService.InputChanged:Connect(function(inp)
+			if not rDragging then return end
+			if inp.UserInputType ~= Enum.UserInputType.MouseMovement and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+			local mouse = UserInputService:GetMouseLocation()
+			local delta = mouse - rStartMouse
+			local newW  = math.max(MIN_W, rStartSize.X + delta.X)
+			local newH  = math.max(MIN_H, rStartSize.Y + delta.Y)
+			win.Size    = UDim2.new(0, newW, 0, newH)
+			clampToViewport()
+		end))
+		windowMaid:Give(UserInputService.InputEnded:Connect(function(inp)
+			if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+				rDragging = false
+			end
+		end))
+	end
 
 	local minimized = false
 	local restoredSize = win.Size
@@ -1509,7 +1548,7 @@ local function buildWindow(cfg)
 						Position       = UDim2.new(0, 14, 0, 28),
 						Size           = UDim2.new(0.8, 0, 0, 18),
 						Text           = c2.Note,
-						TextSize       = 11,
+						TextSize       = 12,
 						TextColor3     = T.TextSub,
 						Font           = Enum.Font.Gotham,
 						TextXAlignment = Enum.TextXAlignment.Left,
@@ -1587,7 +1626,7 @@ local function buildWindow(cfg)
 					Name           = "_dynNote",
 					Position       = UDim2.new(0, 14, 0, hasNote and 28 or 0),
 					Size           = UDim2.new(0.8, 0, 0, 16),
-					TextSize       = 11,
+					TextSize       = 12,
 					TextColor3     = T.TextSub,
 					Font           = Enum.Font.Gotham,
 					TextXAlignment = Enum.TextXAlignment.Left,
@@ -2229,6 +2268,13 @@ local function buildWindow(cfg)
 				tb.Parent            = wrap
 
 				tb.Focused:Connect(function() stroke(wrap, 1, T.Accent) end)
+				if iNum then
+					tb:GetPropertyChangedSignal("Text"):Connect(function()
+						local cursor = tb.CursorPosition
+						local filtered = tb.Text:gsub("[^%d%.%-]", "")
+						if filtered ~= tb.Text then tb.Text = filtered; tb.CursorPosition = cursor end
+					end)
+				end
 				tb.FocusLost:Connect(function()
 					stroke(wrap, 1, T.Border)
 					local v = tb.Text
@@ -2466,7 +2512,7 @@ local function buildWindow(cfg)
 							Position       = UDim2.new(0, 0, 0, imgPx + 2),
 							Size           = UDim2.new(1, 0, 0, labelH),
 							Text           = caption,
-							TextSize       = 11,
+							TextSize       = 12,
 							Font           = Enum.Font.Gotham,
 							TextColor3     = T.TextSub,
 							TextXAlignment = Enum.TextXAlignment.Center,

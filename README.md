@@ -23,7 +23,7 @@ A modular Roblox UI library with a warm, polished aesthetic.
 
 ## Current support
 
-EmberUI mounts to `PlayerGui` and supports mouse, touch activation, and basic gamepad/keyboard button selection through Roblox `Activated` controls. Dropdown option search and constrained window resizing are available. Virtualised large lists, complete keyboard/gamepad navigation, responsive page reflow, and persistence remain v3 work in progress.
+EmberUI mounts via `gethui()` → CoreGui → PlayerGui (in that order) and calls `protect_gui` when available. Mouse, touch, and basic gamepad/keyboard input are supported through Roblox `Activated` controls. Dropdown option search and drag-to-resize (bottom-right corner handle, minimum 300×200) are available. Virtualised large lists, complete keyboard/gamepad navigation, responsive page reflow, and persistence remain v3 work in progress.
 
 ## Themes
 

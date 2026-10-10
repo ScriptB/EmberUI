@@ -46,6 +46,11 @@ Check-Signature "Label TextWrapped"       'TextWrapped    = true,'
 Check-Signature "search empty-section"   'sec._wrap.Visible = any or #sec._elements == 0'
 Check-Signature "duplicate Id returns"    'return self._ids[id]'
 Check-Signature "viewport auto-scale"     '(viewport.X * 0.92) / win.Size.X.Offset'
+Check-Signature "protect_gui call"        'if type(protect_gui) == "function" then pcall(protect_gui, gui) end'
+Check-Signature "resize handle"           'ResizeHandle'
+Check-Signature "resize min clamp"        'MIN_W, MIN_H = 300, 200'
+Check-Signature "B1 numeric live filter" 'GetPropertyChangedSignal("Text"):Connect'
+Check-Signature "R2 textStroke 0.5"       's.Transparency = 0.5'
 
 if ($failures -gt 0) {
     Write-Error "$failures sync check(s) failed. Edit EmberUI.lua to match the source files in src/."
